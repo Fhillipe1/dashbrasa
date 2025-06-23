@@ -39,6 +39,7 @@ def run_extraction():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("window-size=1920,1080") # Adiciona um tamanho de janela para evitar problemas de layout
     chrome_options.binary_location = "/usr/bin/chromium"
 
     prefs = {'download.default_directory': DOWNLOAD_PATH}
@@ -55,10 +56,9 @@ def run_extraction():
         print("Acessando a página de login...")
         driver.get(SAIPOS_LOGIN_URL)
         
-        # Espera INTELIGENTE pelo campo de e-mail antes de prosseguir
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='E-mail']")))
+        print("Página de login carregada.")
         
-        print("Preenchendo informações de login...")
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='E-mail']").send_keys(SAIPOS_USER)
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(SAIPOS_PASSWORD)
         
@@ -66,35 +66,43 @@ def run_extraction():
         driver.find_element(By.CSS_SELECTOR, "i.zmdi-arrow-forward").click()
         
         try:
-            # Tenta clicar no pop-up de "já logado", mas com um tempo curto
             popup_wait = WebDriverWait(driver, 5)
             botao_sim_confirm = popup_wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
-            print("  -> Pop-up encontrado! Clicando em 'Sim'...")
+            print("  -> Pop-up de 'desconectar' encontrado! Clicando em 'Sim'...")
             botao_sim_confirm.click()
         except TimeoutException:
-            print("  -> Pop-up de 'desconectar' não apareceu. Ótimo, seguindo em frente!")
+            print("  -> Pop-up de 'desconectar' não apareceu. Continuando...")
         
-        # --- LÓGICA DE ESPERA ATUALIZADA ---
-        print("Login finalizado. Aguardando o painel principal carregar...")
-        # Substitui time.sleep(15) pela espera inteligente pelo botão de menu
+        # --- NOVA ETAPA DE VERIFICAÇÃO PÓS-LOGIN ---
+        print("Aguardando mudança de página após login...")
+        time.sleep(5) # Uma pequena pausa para a página começar a redirecionar
+        
+        url_atual = driver.current_url
+        print(f"URL após tentativa de login: {url_atual}")
+        
+        # Se a URL ainda contém 'access/login', o login falhou
+        if "access/login" in url_atual:
+            raise Exception("Falha no login. O robô permaneceu na página de login.")
+
+        print("Login bem-sucedido! Aguardando o painel principal carregar...")
         menu_trigger_button = wait.until(EC.element_to_be_clickable((By.ID, "menu-trigger")))
         print("Painel carregado. Clicando no menu principal...")
         menu_trigger_button.click()
 
+        # O resto da automação continua com as pausas inteligentes...
         print("Clicando em 'Vendas por período'...")
         vendas_por_periodo_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href="#/app/report/sales-by-period"]')))
         vendas_por_periodo_link.click()
 
         print("Localizando e preenchendo os campos de data...")
-        # Espera pelo menos um dos campos de data aparecer
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
         campos_de_data = driver.find_elements(By.CSS_SELECTOR, "input[id='datePickerSaipos']")
         if len(campos_de_data) < 2: raise Exception("Não foi possível encontrar os dois campos de data.")
         
-        # O resto da automação continua como antes...
         data_inicial_campo = campos_de_data[0]
         data_inicial_texto = "07/05/2025"
         data_inicial_campo.clear(); data_inicial_campo.send_keys(data_inicial_texto)
+
         data_final_campo = campos_de_data[1]
         data_final_texto = datetime.now().strftime("%d/%m/%Y")
         data_final_campo.clear(); data_final_campo.send_keys(data_final_texto)
@@ -113,14 +121,18 @@ def run_extraction():
         print("Extração automatizada finalizada com sucesso!")
 
     except (TimeoutException, NoSuchElementException, Exception) as e:
-        # Bloco de erro aprimorado para nos dar mais informações
-        print("\n--- OCORREU UM ERRO DURANTE A AUTOMAÇÃO ---")
-        print(f"Erro: {e}")
-        # Salva o código-fonte da página atual para depuração
-        page_source = driver.page_source
-        print("\n--- CÓDIGO-FONTE DA PÁGINA NO MOMENTO DO ERRO ---")
-        print(page_source[:2000] + "...") # Imprime os primeiros 2000 caracteres
-        return None # Retorna None para indicar que a extração falhou
+        print("\n--- OCORREU UM ERRO CRÍTICO DURANTE A AUTOMAÇÃO ---")
+        print(f"Tipo do Erro: {type(e).__name__}")
+        print(f"Mensagem do Erro: {e}")
+        
+        # --- LOGS DE DEPURAÇÃO APRIMORADOS ---
+        url_no_erro = driver.current_url
+        titulo_no_erro = driver.title
+        print(f"\nINFORMAÇÕES DE DEPURAÇÃO:")
+        print(f"  -> URL no momento do erro: {url_no_erro}")
+        print(f"  -> Título da página no momento do erro: '{titulo_no_erro}'")
+        
+        return None
     finally:
         print("Fechando o navegador.")
         driver.quit()
