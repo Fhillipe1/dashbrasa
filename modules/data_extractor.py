@@ -11,15 +11,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# Importa a função do outro módulo
 from modules.sheets_handler import update_sheet_with_new_data
 
 def run_extraction():
-    """
-    Função principal que executa toda a automação com Selenium para extrair o relatório da Saipos,
-    e depois atualiza uma planilha Google com os novos dados.
-    Configurada para rodar tanto localmente quanto no Streamlit Cloud.
-    """
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
     SAIPOS_PASSWORD = st.secrets.get("SAIPOS_PASSWORD")
@@ -39,127 +33,69 @@ def run_extraction():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("window-size=1920,1080") # Adiciona um tamanho de janela para evitar problemas de layout
+    chrome_options.add_argument("window-size=1920,1080")
     chrome_options.binary_location = "/usr/bin/chromium"
-
     prefs = {'download.default_directory': DOWNLOAD_PATH}
     chrome_options.add_experimental_option('prefs', prefs)
-    
     service = Service("/usr/bin/chromedriver")
-    
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-    # Define um tempo máximo de espera para os elementos
     wait = WebDriverWait(driver, 30)
 
     try:
         print("Acessando a página de login...")
         driver.get(SAIPOS_LOGIN_URL)
-        
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder='E-mail']")))
-        print("Página de login carregada.")
+        print(f"Página de login carregada em: {driver.current_url}")
         
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='E-mail']").send_keys(SAIPOS_USER)
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(SAIPOS_PASSWORD)
-        
-        print("Clicando na seta para iniciar o login...")
         driver.find_element(By.CSS_SELECTOR, "i.zmdi-arrow-forward").click()
+        print("Tentativa de login enviada...")
         
         try:
-            popup_wait = WebDriverWait(driver, 5)
+            popup_wait = WebDriverWait(driver, 7)
             botao_sim_confirm = popup_wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
             print("  -> Pop-up de 'desconectar' encontrado! Clicando em 'Sim'...")
             botao_sim_confirm.click()
+            print("  -> Pop-up 'Sim' clicado. Aguardando redirecionamento...")
         except TimeoutException:
             print("  -> Pop-up de 'desconectar' não apareceu. Continuando...")
         
-        # --- NOVA ETAPA DE VERIFICAÇÃO PÓS-LOGIN ---
-        print("Aguardando mudança de página após login...")
-        time.sleep(5) # Uma pequena pausa para a página começar a redirecionar
+        time.sleep(5) # Pausa crucial para o redirecionamento da página acontecer
+        print(f"URL ATUAL APÓS LOGIN/POP-UP: {driver.current_url}")
         
-        url_atual = driver.current_url
-        print(f"URL após tentativa de login: {url_atual}")
-        
-        # Se a URL ainda contém 'access/login', o login falhou
-        if "access/login" in url_atual:
+        if "access/login" in driver.current_url:
             raise Exception("Falha no login. O robô permaneceu na página de login.")
 
-        print("Login bem-sucedido! Aguardando o painel principal carregar...")
+        print("Aguardando o elemento principal do dashboard ('menu-trigger')...")
         menu_trigger_button = wait.until(EC.element_to_be_clickable((By.ID, "menu-trigger")))
-        print("Painel carregado. Clicando no menu principal...")
+        print("Elemento 'menu-trigger' encontrado! Painel principal carregado.")
         menu_trigger_button.click()
-
-        # O resto da automação continua com as pausas inteligentes...
-        print("Clicando em 'Vendas por período'...")
-        vendas_por_periodo_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href="#/app/report/sales-by-period"]')))
-        vendas_por_periodo_link.click()
-
-        print("Localizando e preenchendo os campos de data...")
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
-        campos_de_data = driver.find_elements(By.CSS_SELECTOR, "input[id='datePickerSaipos']")
-        if len(campos_de_data) < 2: raise Exception("Não foi possível encontrar os dois campos de data.")
         
-        data_inicial_campo = campos_de_data[0]
-        data_inicial_texto = "07/05/2025"
-        data_inicial_campo.clear(); data_inicial_campo.send_keys(data_inicial_texto)
-
-        data_final_campo = campos_de_data[1]
-        data_final_texto = datetime.now().strftime("%d/%m/%Y")
-        data_final_campo.clear(); data_final_campo.send_keys(data_final_texto)
-        time.sleep(2)
-
-        print("Clicando em 'Buscar' para filtrar os resultados...")
-        driver.find_element(By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]').click()
-        time.sleep(5) 
-
-        limpar_pasta_relatorios(DOWNLOAD_PATH)
-        
-        print("Clicando no botão 'Exportar'...")
-        driver.find_element(By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]').click()
-        print("Aguardando o download do arquivo...")
-        time.sleep(60)
-        print("Extração automatizada finalizada com sucesso!")
-
-    except (TimeoutException, NoSuchElementException, Exception) as e:
-        print("\n--- OCORREU UM ERRO CRÍTICO DURANTE A AUTOMAÇÃO ---")
-        print(f"Tipo do Erro: {type(e).__name__}")
-        print(f"Mensagem do Erro: {e}")
-        
-        # --- LOGS DE DEPURAÇÃO APRIMORADOS ---
-        url_no_erro = driver.current_url
-        titulo_no_erro = driver.title
-        print(f"\nINFORMAÇÕES DE DEPURAÇÃO:")
-        print(f"  -> URL no momento do erro: {url_no_erro}")
-        print(f"  -> Título da página no momento do erro: '{titulo_no_erro}'")
-        
-        return None
-    finally:
-        print("Fechando o navegador.")
-        driver.quit()
-
-    # --- Processamento do Relatório e Sincronização ---
-    try:
-        report_files = [f for f in os.listdir(DOWNLOAD_PATH) if f.endswith('.xlsx')]
-        if not report_files:
-            print("ERRO: Nenhum arquivo de relatório (.xlsx) foi encontrado na pasta de download.")
-            return None
-
-        nome_do_relatorio = report_files[0]
-        full_path_to_file = os.path.join(DOWNLOAD_PATH, nome_do_relatorio)
-        print(f"Encontrado o relatório: {full_path_to_file}")
-        
-        df = pd.read_excel(full_path_to_file)
-        
-        print("\n--- Iniciando sincronização com o Google Sheets ---")
-        linhas_adicionadas = update_sheet_with_new_data(df)
-
-        if linhas_adicionadas >= 0:
-            print(f"Sincronização concluída. {linhas_adicionadas} novas linhas adicionadas.")
-        else:
-            print("Ocorreu um erro durante a sincronização com o Google Sheets.")
-        
-        return df
+        # O resto da automação continua...
 
     except Exception as e:
-        print(f"\nOcorreu um erro ao processar o arquivo baixado ou sincronizar: {e}")
+        print("\n\n*********************************************************")
+        print("*** INFORMAÇÕES DE DEPURAÇÃO CRÍTICA         ***")
+        print("*********************************************************")
+        print(f"Ocorreu um erro do tipo: {type(e).__name__}")
+        
+        url_no_erro = driver.current_url
+        titulo_no_erro = driver.title
+        
+        print(f"\nURL ATUAL: {url_no_erro}")
+        print(f"TÍTULO DA PÁGINA: '{titulo_no_erro}'")
+        
+        print("\n--- INÍCIO DO CÓDIGO-FONTE DA PÁGINA ---")
+        print(driver.page_source[:3000]) # Imprime os primeiros 3000 caracteres
+        print("--- FIM DO CÓDIGO-FONTE PARCIAL ---")
+        print("*********************************************************\n")
+        
+        driver.quit()
         return None
+    
+    # Se tudo correu bem, o resto do código (que está fora do try/except principal de automação) seria executado
+    # Esta parte foi omitida pois o erro ocorre antes dela.
+    print("ERRO INESPERADO: O código de extração passou pelo Try/Except mas não deveria.")
+    driver.quit()
+    return None
