@@ -1,3 +1,4 @@
+import streamlit as st
 import time
 import os
 import pandas as pd
@@ -6,24 +7,20 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from dotenv import load_dotenv
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-import streamlit as st
 
-# Importa a função do nosso novo módulo
+# Importa as funções dos outros módulos
 from modules.sheets_handler import update_sheet_with_new_data
 
 def run_extraction():
     """
     Função principal que executa toda a automação com Selenium para extrair o relatório da Saipos,
     e depois atualiza uma planilha Google com os novos dados.
+    Configurada para rodar tanto localmente quanto no Streamlit Cloud.
     """
-    load_dotenv(dotenv_path=os.path.join(os.getcwd(), '.env'))
-
-    # --- ÁREA DE CONFIGURAÇÃO ---
+    # Lê os segredos de forma segura
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
     SAIPOS_PASSWORD = st.secrets.get("SAIPOS_PASSWORD")
@@ -43,27 +40,31 @@ def run_extraction():
 
     # --- Início da Automação ---
     print("Iniciando o robô extrator de relatórios...")
-   # --- NOVO BLOCO DE OPÇÕES PARA A NUVEM ---
+    
+    # --- OPÇÕES DO CHROME PARA NUVEM ---
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    
+    # Aponta para o local onde o Chromium foi instalado pelo packages.txt
+    chrome_options.binary_location = "/usr/bin/chromium"
 
-    chrome_options = Options()
-    prefs = {
-        'download.default_directory': DOWNLOAD_PATH,
-        "profile.default_content_setting_values.automatic_downloads": 1 
-    }
+    prefs = {'download.default_directory': DOWNLOAD_PATH}
     chrome_options.add_experimental_option('prefs', prefs)
-    service = Service(ChromeDriverManager().install())
+    
+    # Aponta para o local onde o ChromeDriver foi instalado
+    service = Service("/usr/bin/chromedriver")
+    
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        # ETAPA 1 E 2: LOGIN, NAVEGAÇÃO E DOWNLOAD (Seu código, sem alterações)
+        # ETAPA 1 E 2: LOGIN, NAVEGAÇÃO E DOWNLOAD
         print("Acessando a página de login...")
         driver.get(SAIPOS_LOGIN_URL)
-        driver.implicitly_wait(15)
+        time.sleep(5) # Dando um tempo extra para o JS carregar no ambiente da nuvem
+        
         print("Preenchendo informações de login...")
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='E-mail']").send_keys(SAIPOS_USER)
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(SAIPOS_PASSWORD)
@@ -73,11 +74,11 @@ def run_extraction():
         
         try:
             print("Verificando se o pop-up 'desconectar de outro local' apareceu...")
-            time.sleep(2)
-            botao_sim_confirm = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
+            wait = WebDriverWait(driver, 5)
+            botao_sim_confirm = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
             print("  -> Pop-up encontrado! Clicando em 'Sim'...")
-            time.sleep(2)
             botao_sim_confirm.click()
+            time.sleep(2)
         except TimeoutException:
             print("  -> Pop-up não apareceu. Ótimo, seguindo em frente!")
         
@@ -99,15 +100,11 @@ def run_extraction():
 
         data_inicial_campo = campos_de_data[0]
         data_inicial_texto = "07/05/2025"
-        print(f"Preenchendo data inicial com: {data_inicial_texto}")
-        data_inicial_campo.clear()
-        data_inicial_campo.send_keys(data_inicial_texto)
+        data_inicial_campo.clear(); data_inicial_campo.send_keys(data_inicial_texto)
 
         data_final_campo = campos_de_data[1]
         data_final_texto = datetime.now().strftime("%d/%m/%Y")
-        print(f"Preenchendo data final com: {data_final_texto} (Hoje)")
-        data_final_campo.clear()
-        data_final_campo.send_keys(data_final_texto)
+        data_final_campo.clear(); data_final_campo.send_keys(data_final_texto)
         time.sleep(3)
 
         print("Clicando em 'Buscar' para filtrar os resultados...")
@@ -119,7 +116,7 @@ def run_extraction():
         print("Clicando no botão 'Exportar'...")
         driver.find_element(By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]').click()
         print("Aguardando o download do arquivo...")
-        time.sleep(60) # Aumentado conforme seu código
+        time.sleep(60)
         print("Extração automatizada finalizada com sucesso!")
 
     finally:
@@ -141,7 +138,6 @@ def run_extraction():
         df = pd.read_excel(full_path_to_file)
         print("\nSucesso! DataFrame criado a partir do arquivo Excel.")
         
-        # --- CHAMADA PARA O GOOGLE SHEETS ---
         print("\n--- Iniciando sincronização com o Google Sheets ---")
         linhas_adicionadas = update_sheet_with_new_data(df)
 
