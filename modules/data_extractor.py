@@ -11,48 +11,53 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-# Importa a função do outro módulo
+# Importa a função do nosso módulo de planilhas
 from modules.sheets_handler import update_sheet_with_new_data
 
 def run_extraction():
     """
     Função principal que executa toda a automação com Selenium para extrair o relatório da Saipos,
     e depois atualiza uma planilha Google com os novos dados.
-    Configurada para rodar tanto localmente quanto no Streamlit Cloud.
+    Configurada para rodar tanto localmente quanto no Streamlit Cloud com pausas robustas.
     """
+    # Carrega segredos de forma segura
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
     SAIPOS_PASSWORD = st.secrets.get("SAIPOS_PASSWORD")
     DOWNLOAD_PATH = os.path.join(os.getcwd(), 'relatorios_saipos')
 
     def limpar_pasta_relatorios(caminho_da_pasta):
-        if os.path.exists(caminho_da_pasta):
+        """Verifica e limpa a pasta de relatórios antes de um novo download."""
+        if not os.path.exists(caminho_da_pasta):
+            os.makedirs(caminho_da_pasta)
+        else:
             for nome_arquivo in os.listdir(caminho_da_pasta):
                 os.remove(os.path.join(caminho_da_pasta, nome_arquivo))
-        else:
-            os.makedirs(DOWNLOAD_PATH)
+        print(f"Pasta de relatórios '{caminho_da_pasta}' está limpa e pronta.")
 
     print("Iniciando o robô extrator de relatórios...")
     
+    # Configurações do Chrome para o ambiente da nuvem
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("window-size=1920,1080") # Adiciona um tamanho de janela para evitar problemas de layout
+    chrome_options.add_argument("window-size=1920,1080")
     chrome_options.binary_location = "/usr/bin/chromium"
-
     prefs = {'download.default_directory': DOWNLOAD_PATH}
     chrome_options.add_experimental_option('prefs', prefs)
     
     service = Service("/usr/bin/chromedriver")
-    
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    
-    # Define um tempo máximo de espera para os elementos
-    wait = WebDriverWait(driver, 30)
+    driver = None # Inicializa o driver como None para o bloco finally
 
     try:
+        print("Inicializando o WebDriver do Chrome...")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        wait = WebDriverWait(driver, 40) # Aumenta o tempo de espera geral para 40 segundos
+        print("WebDriver inicializado com sucesso.")
+
+        # ETAPA 1: LOGIN
         print("Acessando a página de login...")
         driver.get(SAIPOS_LOGIN_URL)
         
@@ -61,46 +66,37 @@ def run_extraction():
         
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='E-mail']").send_keys(SAIPOS_USER)
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(SAIPOS_PASSWORD)
-        
-        print("Clicando na seta para iniciar o login...")
         driver.find_element(By.CSS_SELECTOR, "i.zmdi-arrow-forward").click()
+        print("Formulário de login enviado.")
         
         try:
-            popup_wait = WebDriverWait(driver, 5)
+            popup_wait = WebDriverWait(driver, 7)
             botao_sim_confirm = popup_wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
-            print("  -> Pop-up de 'desconectar' encontrado! Clicando em 'Sim'...")
+            print("-> Pop-up de 'desconectar' encontrado! Clicando em 'Sim'...")
             botao_sim_confirm.click()
+            time.sleep(3) # Pausa extra após clicar no pop-up
         except TimeoutException:
-            print("  -> Pop-up de 'desconectar' não apareceu. Continuando...")
+            print("-> Pop-up de 'desconectar' não apareceu.")
         
-        # --- NOVA ETAPA DE VERIFICAÇÃO PÓS-LOGIN ---
-        print("Aguardando mudança de página após login...")
-        time.sleep(5) # Uma pequena pausa para a página começar a redirecionar
-        
-        url_atual = driver.current_url
-        print(f"URL após tentativa de login: {url_atual}")
-        
-        # Se a URL ainda contém 'access/login', o login falhou
-        if "access/login" in url_atual:
-            raise Exception("Falha no login. O robô permaneceu na página de login.")
-
-        print("Login bem-sucedido! Aguardando o painel principal carregar...")
+        # ETAPA 2: NAVEGAÇÃO
+        print("Login processado. Aguardando o painel principal carregar...")
         menu_trigger_button = wait.until(EC.element_to_be_clickable((By.ID, "menu-trigger")))
-        print("Painel carregado. Clicando no menu principal...")
+        print("Painel principal carregado. Clicando no menu...")
         menu_trigger_button.click()
 
-        # O resto da automação continua com as pausas inteligentes...
         print("Clicando em 'Vendas por período'...")
         vendas_por_periodo_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href="#/app/report/sales-by-period"]')))
         vendas_por_periodo_link.click()
+        print("Página de relatórios carregada.")
 
-        print("Localizando e preenchendo os campos de data...")
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
+        # ETAPA 3: FILTRO E DOWNLOAD
+        print("Aguardando e preenchendo os campos de data...")
+        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
         campos_de_data = driver.find_elements(By.CSS_SELECTOR, "input[id='datePickerSaipos']")
         if len(campos_de_data) < 2: raise Exception("Não foi possível encontrar os dois campos de data.")
         
         data_inicial_campo = campos_de_data[0]
-        data_inicial_texto = "07/05/2025"
+        data_inicial_texto = "07/05/2025" # Conforme solicitado
         data_inicial_campo.clear(); data_inicial_campo.send_keys(data_inicial_texto)
 
         data_final_campo = campos_de_data[1]
@@ -110,34 +106,32 @@ def run_extraction():
 
         print("Clicando em 'Buscar' para filtrar os resultados...")
         driver.find_element(By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]').click()
-        time.sleep(5) 
+        time.sleep(5) # Espera para os resultados carregarem na tela
 
         limpar_pasta_relatorios(DOWNLOAD_PATH)
         
         print("Clicando no botão 'Exportar'...")
         driver.find_element(By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]').click()
-        print("Aguardando o download do arquivo...")
-        time.sleep(60)
+        print("Aguardando o download do arquivo (pode levar até 90 segundos)...")
+        time.sleep(90) # Tempo de espera generoso para o download completar
         print("Extração automatizada finalizada com sucesso!")
 
-    except (TimeoutException, NoSuchElementException, Exception) as e:
-        print("\n--- OCORREU UM ERRO CRÍTICO DURANTE A AUTOMAÇÃO ---")
-        print(f"Tipo do Erro: {type(e).__name__}")
-        print(f"Mensagem do Erro: {e}")
-        
-        # --- LOGS DE DEPURAÇÃO APRIMORADOS ---
-        url_no_erro = driver.current_url
-        titulo_no_erro = driver.title
-        print(f"\nINFORMAÇÕES DE DEPURAÇÃO:")
-        print(f"  -> URL no momento do erro: {url_no_erro}")
-        print(f"  -> Título da página no momento do erro: '{titulo_no_erro}'")
-        
+    except Exception as e:
+        print("\n--- OCORREU UM ERRO DURANTE A AUTOMAÇÃO ---")
+        if driver:
+            print(f"URL no momento do erro: {driver.current_url}")
+            print(f"Título da página: '{driver.title}'")
+        print(f"Erro: {e}")
+        if driver:
+            driver.quit()
         return None
     finally:
-        print("Fechando o navegador.")
-        driver.quit()
+        if driver:
+            print("Fechando o navegador.")
+            driver.quit()
 
-    # --- Processamento do Relatório e Sincronização ---
+    # ETAPA 4: PROCESSAMENTO DO ARQUIVO E SINCRONIZAÇÃO
+    print("\n--- Processando o arquivo baixado ---")
     try:
         report_files = [f for f in os.listdir(DOWNLOAD_PATH) if f.endswith('.xlsx')]
         if not report_files:
