@@ -11,7 +11,7 @@ import gspread
 from gspread_dataframe import get_as_dataframe
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente (essencial para rodar localmente)
+# Carrega variáveis de ambiente (para senhas e nomes de arquivos)
 load_dotenv()
 
 # Configuração da página
@@ -27,7 +27,7 @@ def format_currency(value):
     return f"R$ {s}"
 
 @st.cache_data
-def carregar_dados_brutos():
+def carregar_dados_das_planilhas():
     """Lê os dados diretamente da Planilha Google, nossa única fonte da verdade."""
     print("Iniciando carregamento de dados da Planilha Google...")
     df_validos = pd.DataFrame()
@@ -65,16 +65,15 @@ def carregar_dados_brutos():
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
             df_cancelados.dropna(how='all', axis=1, inplace=True)
             print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
-        
+            
         return df_validos, df_cancelados
     except Exception as e:
         st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
         return None, None
 
-
 @st.cache_data
 def carregar_base_ceps():
-    """Carrega a base de dados de CEPs local."""
+    """Carrega a base de dados de CEPs e garante que as coordenadas sejam numéricas."""
     cache_file = 'cep_cache.csv'
     if os.path.exists(cache_file):
         df = pd.read_csv(cache_file, dtype=str)
@@ -85,53 +84,51 @@ def carregar_base_ceps():
         return df
     return None
 
+def padronizar_texto(texto):
+    """Função para limpar e padronizar texto."""
+    if not isinstance(texto, str): return texto
+    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return texto.strip().upper()
+
 def tratar_dados(df_validos, df_cancelados):
-    """Aplica as transformações e correções de fuso horário nos dados lidos da planilha."""
+    """Aplica as transformações de tipo de dado e fuso horário nos dados lidos da planilha."""
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
 
     df_validos = df_validos.copy()
 
-    # --- LÓGICA DE CORREÇÃO DE FUSO HORÁRIO NA LEITURA ---
-    # 1. Converte a coluna para datetime.
+    # Garante que colunas de data e numéricas lidas da planilha (que podem vir como texto) sejam convertidas
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
-    
-    # 2. Assume que a data lida da planilha é UTC e a CONVERTE para o fuso de Aracaju.
+
     fuso_aracaju = pytz.timezone('America/Maceio')
     if df_validos['Data da venda'].dt.tz is None:
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_aracaju)
     else:
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
-
-    # 3. Agora que a data está 100% correta, criamos as outras colunas
+    
     df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
     df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
-
-    # Garante que colunas numéricas e outras sejam do tipo correto
+    
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
 
-    def padronizar_texto(texto):
-        if not isinstance(texto, str): return ""
-        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
-
     delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
     if 'Canal de venda' in df_validos.columns:
         df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
+    
+    if 'Bairro' in df_validos.columns:
+        df_validos['Bairro'] = df_validos['Bairro'].astype(str).apply(padronizar_texto)
 
-    if 'CEP' in df_validos.columns:
-        df_validos['CEP'] = df_validos['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
-        
     return df_validos, df_cancelados
 
 def create_gradient_line_chart(df_data):
-    """Cria um gráfico de linha com cores de gradiente."""
+    """Cria um gráfico de linha com cores de gradiente para subidas e descidas."""
     df_data = df_data.copy()
     df_data['Data'] = pd.to_datetime(df_data['Data'])
     df_data = df_data.sort_values(by='Data')
@@ -151,7 +148,7 @@ def create_gradient_line_chart(df_data):
     ))
     fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
     return fig
-
+    
 # --- Início da Interface do Streamlit ---
 col_logo, col_title = st.columns([1, 25])
 with col_logo:
@@ -160,15 +157,17 @@ with col_title:
     st.title("Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados(df_validos_raw, df_cancelados)
+    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
+    df_validos, df_cancelados = tratar_dados(df_validos_raw, df_cancelados_raw)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None or df_validos.empty:
-    st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
+    st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique se a planilha tem dados ou execute a atualização.")
     st.stop()
 
 # --- Corpo Principal do Dashboard ---
+st.success("Dados processados com sucesso!")
+
 with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
     col_filtro1, col_filtro2 = st.columns(2)
     with col_filtro1:
@@ -182,6 +181,7 @@ if len(data_selecionada) != 2: st.stop()
 
 start_date, end_date = data_selecionada
 df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
+
 st.session_state['df_filtrado'] = df_filtrado
 
 abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
@@ -197,18 +197,20 @@ with abas[0]:
             st.metric(label="Ticket Médio", value=format_currency(faturamento_total / df_filtrado['Pedido'].nunique()))
     
     st.divider()
-    st.subheader("Evolução do Faturamento no Período")
-    faturamento_diario = df_filtrado.groupby(df_filtrado['Data'])['Total'].sum().reset_index()
+
+    st.subheader("Evolução do Faturamento Diário")
+    faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
     if not faturamento_diario.empty and len(faturamento_diario) > 1:
-        st.plotly_chart(create_gradient_line_chart(faturamento_diario), use_container_width=True)
+        fig_faturamento = create_gradient_line_chart(faturamento_diario)
+        st.plotly_chart(fig_faturamento, use_container_width=True)
 
 with abas[1]:
     st.header("Análise de Delivery")
-    df_delivery = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
-    if not df_delivery.empty:
+    df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
+    if not df_delivery_filtrado.empty:
         st.markdown("##### Mapa de Calor de Pedidos por CEP")
         if df_ceps_database is not None:
-            pedidos_por_cep = df_delivery['CEP'].dropna().value_counts().reset_index()
+            pedidos_por_cep = df_delivery_filtrado['CEP'].dropna().value_counts().reset_index()
             pedidos_por_cep.columns = ['CEP', 'num_pedidos']
             map_data = pd.merge(pedidos_por_cep, df_ceps_database, left_on='CEP', right_on='cep', how='inner')
             if not map_data.empty:
@@ -218,6 +220,8 @@ with abas[1]:
                     initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
                     layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=40)],
                     tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
+            else:
+                st.warning("Nenhum CEP do relatório foi encontrado no seu cache. Rode `python build_cep_cache.py` para atualizar.")
         else:
             st.warning("`cep_cache.csv` não encontrado. Rode `python build_cep_cache.py` para gerar o mapa.")
     else:
@@ -228,4 +232,4 @@ with abas[2]:
     if df_cancelados is not None and not df_cancelados.empty:
         st.dataframe(df_cancelados)
     else:
-        st.info("Nenhum pedido cancelado encontrado.")
+        st.info("Nenhum pedido cancelado no período.")
