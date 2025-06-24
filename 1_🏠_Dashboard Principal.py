@@ -21,39 +21,41 @@ def format_currency(value):
     return f"R$ {s}"
 
 @st.cache_data
-def carregar_dados_da_planilha():
-    """Lê todos os dados da Planilha Google e retorna como um DataFrame."""
+def carregar_dados_das_planilhas():
+    """Lê os dados das duas abas da Planilha Google."""
+    print("Iniciando carregamento de dados da Planilha Google...")
     try:
-        # Tenta autenticar via Streamlit Secrets (para quando estiver na nuvem)
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
         else:
-            # Se não, usa o arquivo local
             credentials_file = "google_credentials.json"
             if not os.path.exists(credentials_file):
                 st.error(f"ERRO: Arquivo de credenciais '{credentials_file}' não encontrado.")
-                return None
+                return None, None
             gc = gspread.service_account(filename=credentials_file)
 
         sheet_name = st.secrets.get("GOOGLE_SHEET_NAME") or os.getenv("GOOGLE_SHEET_NAME")
         if not sheet_name:
             st.error("ERRO: GOOGLE_SHEET_NAME não configurado.")
-            return None
-            
-        print(f"Lendo dados da Planilha Google: '{sheet_name}'...")
+            return None, None
+        
         spreadsheet = gc.open(sheet_name)
-        # Lê a aba 'Vendas Validas'
-        worksheet = spreadsheet.worksheet('Página1')
-        df = get_as_dataframe(worksheet, evaluate_formulas=False, header=0)
-        df.dropna(how='all', axis=1, inplace=True)
-        print(f"Sucesso! {len(df)} linhas lidas da planilha.")
-        return df
-
+        
+        worksheet_validos = spreadsheet.get_worksheet(0)
+        df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
+        df_validos.dropna(how='all', axis=1, inplace=True)
+        print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
+        
+        worksheet_cancelados = spreadsheet.get_worksheet(1)
+        df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
+        df_cancelados.dropna(how='all', axis=1, inplace=True)
+        print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
+        
+        return df_validos, df_cancelados
     except Exception as e:
-        st.error(f"ERRO ao ler a Planilha Google: {e}")
-        return None
-
+        st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
+        return None, None
 
 @st.cache_data
 def carregar_base_ceps():
@@ -68,31 +70,37 @@ def carregar_base_ceps():
         return df
     return None
 
-def padronizar_texto(texto):
-    """Função para limpar e padronizar texto."""
-    if not isinstance(texto, str): return texto
-    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return texto.strip().upper()
+def tratar_dados_pos_leitura(df_validos, df_cancelados):
+    """Aplica as transformações de tipo de dado necessárias para os gráficos e análises."""
+    if df_validos is None or df_validos.empty:
+        return None, None
 
-def tratar_dados(df):
-    """Aplica todas as transformações necessárias no DataFrame lido da planilha."""
-    if df is None or df.empty: return None, None
+    # Garante que os tipos de dados lidos da planilha estejam corretos para manipulação
+    df_validos = df_validos.copy()
     
-    # Como os dados já foram tratados antes de salvar, esta função agora é mais simples.
-    # Ela principalmente garante os tipos de dados corretos para o Streamlit.
-    df_validos = df.copy()
-
-    # Garante que as colunas de data sejam do tipo datetime
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Converte 'Data da venda' para datetime, que é a fonte para as outras colunas
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
-    df_validos['Data'] = pd.to_datetime(df_validos['Data']).dt.date
+    df_validos.dropna(subset=['Data da venda'], inplace=True)
+    
+    # Agora criamos a coluna 'Data' a partir da 'Data da venda' já validada
+    df_validos['Data'] = df_validos['Data da venda'].dt.date
+    
+    # As outras colunas que dependem de 'Data da venda'
+    df_validos['Hora'] = df_validos['Data da venda'].dt.hour
+    day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
+    df_validos['Dia da Semana'] = df_validos['Data da venda'].dt.weekday.map(day_map)
 
-    # Simula um dataframe de cancelados vazio, pois a lógica de separação já foi feita antes
-    df_cancelados = pd.DataFrame() 
+    # Garante que colunas numéricas sejam do tipo correto
+    cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
+    for col in cols_numericas:
+        if col in df_validos.columns:
+            df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
 
     return df_validos, df_cancelados
 
 def create_gradient_line_chart(df_data):
-    """Cria um gráfico de linha com cores de gradiente para subidas e descidas."""
+    """Cria um gráfico de linha com cores de gradiente."""
     df_data['Data'] = pd.to_datetime(df_data['Data'])
     df_data = df_data.sort_values(by='Data')
     df_data['diff'] = df_data['Total'].diff().fillna(0)
