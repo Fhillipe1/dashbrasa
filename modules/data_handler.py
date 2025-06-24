@@ -1,3 +1,5 @@
+# modules/data_handler.py
+
 import streamlit as st
 import pandas as pd
 import gspread
@@ -11,18 +13,18 @@ import time
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# --- NOVA ABORDAGEM COM WEBDRIVER-MANAGER ---
+from selenium.webdriver.chrome.service import Service as ChromeService
+from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.utils import ChromeType # Importa o tipo de Chrome
+
 # --- FUNÇÕES DE AUTENTICAÇÃO E CONEXÃO ---
 
 def _get_google_sheets_client():
-    """
-    Autentica no Google Sheets de forma segura usando os segredos do Streamlit.
-    É uma função "privada" (iniciando com _) para ser usada apenas dentro deste módulo.
-    """
     try:
         credentials = st.secrets["google_credentials"]
         return gspread.service_account_from_dict(credentials)
@@ -33,11 +35,6 @@ def _get_google_sheets_client():
 # --- FUNÇÕES DE EXTRAÇÃO (SELENIUM) ---
 
 def extrair_dados_saipos(download_path):
-    """
-    Usa o Selenium para fazer login na Saipos, baixar o relatório de vendas e lê-lo como um DataFrame.
-    Retorna:
-        pd.DataFrame: DataFrame bruto com os dados do arquivo .xlsx, ou None se falhar.
-    """
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
     REPORT_URL = 'https://conta.saipos.com/#/app/report/sales-by-period'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
@@ -56,17 +53,16 @@ def extrair_dados_saipos(download_path):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("window-size=1920,1080")
     
-    # --- AJUSTE CRÍTICO AQUI ---
-    # Aponta explicitamente para os executáveis do Chromium no ambiente do Streamlit Cloud.
-    # Isso é necessário porque seu packages.txt instala 'chromium' e 'chromium-driver'.
-    chrome_options.binary_location = "/usr/bin/chromium"
-    service = Service(executable_path="/usr/bin/chromedriver")
-    
     prefs = {'download.default_directory': download_path}
     chrome_options.add_experimental_option('prefs', prefs)
     driver = None
     
     try:
+        # --- AJUSTE CRÍTICO USANDO WEBDRIVER-MANAGER ---
+        st.write("Configurando o ChromeDriver com webdriver-manager para Chromium...")
+        # Instala o driver para a versão 'chromium' do navegador
+        service = ChromeService(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+        
         st.write("Inicializando o robô (WebDriver)...")
         driver = webdriver.Chrome(service=service, options=chrome_options)
         wait = WebDriverWait(driver, 40)
@@ -88,7 +84,6 @@ def extrair_dados_saipos(download_path):
         campos_de_data = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
         data_inicial_campo, data_final_campo = campos_de_data[0], campos_de_data[1]
         
-        # Define um período fixo bem amplo para garantir todos os dados
         data_inicial_texto = "01/01/2020"
         data_final_texto = datetime.now().strftime("%d/%m/%Y")
         
@@ -122,13 +117,13 @@ def extrair_dados_saipos(download_path):
         st.error(f"Ocorreu um erro durante a extração com o robô: {e}")
         if driver:
             st.error(f"URL atual: {driver.current_url}")
-            # st.error(f"Código da página: {driver.page_source[:1000]}") # Descomente se precisar de mais detalhes
         return None
     finally:
         if driver:
             driver.quit()
 
 # --- FUNÇÕES DE TRANSFORMAÇÃO DE DADOS ---
+# (O restante do arquivo permanece o mesmo)
 
 def _padronizar_texto(texto):
     if not isinstance(texto, str):
