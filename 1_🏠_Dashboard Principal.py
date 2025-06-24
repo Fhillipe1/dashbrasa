@@ -17,7 +17,7 @@ load_dotenv()
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="🔥", layout="wide")
 
-# --- INÍCIO DE TODAS AS FUNÇÕES AUXILIARES ---
+# --- Funções Auxiliares ---
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -55,14 +55,12 @@ def carregar_dados_das_planilhas():
             worksheet_validos = worksheets[0]
             df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
             df_validos.dropna(how='all', axis=1, inplace=True)
-            print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
         
         if len(worksheets) > 1:
             worksheet_cancelados = worksheets[1]
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
             df_cancelados.dropna(how='all', axis=1, inplace=True)
-            print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
-        
+            
         return df_validos, df_cancelados
     except Exception as e:
         st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
@@ -82,17 +80,23 @@ def carregar_base_ceps():
     return None
 
 def tratar_dados_pos_leitura(df_validos, df_cancelados):
-    """Aplica as transformações de tipo de dado necessárias para os gráficos e análises."""
+    """Aplica as transformações de tipo de dado e fuso horário necessárias."""
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
 
     df_validos = df_validos.copy()
     
-    # Garante que as colunas de data sejam do tipo datetime
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    df_validos['Data'] = pd.to_datetime(df_validos['Data da venda']).dt.date
+    fuso_aracaju = pytz.timezone('America/Maceio')
+    
+    if df_validos['Data da venda'].dt.tz is None:
+        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_aracaju)
+    else:
+        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
+
+    df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
@@ -102,7 +106,7 @@ def tratar_dados_pos_leitura(df_validos, df_cancelados):
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
-            
+
     def padronizar_texto(texto):
         if not isinstance(texto, str): return texto
         return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
@@ -134,16 +138,12 @@ def create_gradient_line_chart(df_data):
     fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
-# --- Início da Interface do Streamlit ---
-col_logo, col_title = st.columns([1, 25])
-with col_logo:
-    st.image("https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", width=50)
-with col_title:
-    st.title("Dashboard de Vendas La Brasa")
+# --- Início da Interface ---
+st.title("🔥 Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
+    df_validos_raw, df_cancelados = carregar_dados_das_planilhas()
+    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None or df_validos.empty:
@@ -167,7 +167,6 @@ df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'
 st.session_state['df_filtrado'] = df_filtrado
 
 abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
-
 with abas[0]:
     st.subheader("Resumo do Período Selecionado")
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
@@ -177,9 +176,7 @@ with abas[0]:
     with col_kpi3: 
         if df_filtrado['Pedido'].nunique() > 0:
             st.metric(label="Ticket Médio", value=format_currency(faturamento_total / df_filtrado['Pedido'].nunique()))
-    
     st.divider()
-    
     st.subheader("Evolução do Faturamento no Período")
     faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
     if not faturamento_diario.empty and len(faturamento_diario) > 1:
