@@ -21,6 +21,9 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.core.os_manager import ChromeType
 
+# --- BIBLIOTECA ESPECIALISTA ANTI-DETECÇÃO ---
+from selenium_stealth import stealth
+
 # --- FUNÇÕES DE AUTENTICAÇÃO E CONEXÃO ---
 
 def _get_google_sheets_client():
@@ -51,11 +54,8 @@ def extrair_dados_saipos(download_path):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("window-size=1920,1080")
-
-    # --- TÉCNICAS DE CAMUFLAGEM ---
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-    chrome_options.add_argument(f'user-agent={user_agent}')
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Opções para dificultar a detecção
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
@@ -64,14 +64,22 @@ def extrair_dados_saipos(download_path):
     driver = None
     
     try:
-        st.write("Configurando o ChromeDriver com webdriver-manager para Chromium...")
+        st.write("Configurando o ChromeDriver...")
         service = ChromeService(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
         
-        st.write("Inicializando o robô (WebDriver) em modo 'camuflado'...")
+        st.write("Inicializando o robô (WebDriver)...")
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        # Adiciona um script para proteger a detecção de automação
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        # --- APLICA A CAMUFLAGEM AVANÇADA (STEALTH) ---
+        st.write("Aplicando camuflagem avançada (selenium-stealth)...")
+        stealth(driver,
+                languages=["pt-BR", "pt"],
+                vendor="Google Inc.",
+                platform="Win32",
+                webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine",
+                fix_hairline=True,
+                )
         
         wait = WebDriverWait(driver, 40)
 
