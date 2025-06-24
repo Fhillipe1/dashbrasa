@@ -1,66 +1,57 @@
+# pages/5_🔬_Debug_de_Dados.py
+
 import streamlit as st
-import pandas as pd
-import sys
+from modules import data_handler, cep_handler
 import os
 
-# Adiciona a pasta raiz ao path para encontrar o módulo de utilidades
-script_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(script_dir)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+st.set_page_config(layout="wide", page_title="Página de Depuração")
 
-# Importa a função do nosso novo módulo
-from modules.utils import carregar_dados_brutos
+st.title("🔬 Página de Depuração e Testes")
+st.markdown("""
+Esta página serve para executar e testar todo o fluxo de ETL (Extração, Transformação e Carga).
+- **Extração**: O robô Selenium acessa a Saipos e baixa o relatório.
+- **Transformação**: Os dados do relatório são limpos, padronizados e enriquecidos.
+- **Carga**: Os dados tratados são salvos no Google Sheets, e o cache de CEPs é atualizado.
 
-st.set_page_config(page_title="Debug de Dados", page_icon="🔬")
-st.title("🔬 Ferramenta de Diagnóstico de Dados")
-st.warning("Esta página é para uso técnico. Use o botão abaixo para inspecionar o processamento de datas do seu relatório.")
+Clique no botão abaixo para iniciar o processo.
+""")
 
-if st.button("Iniciar Inspeção de Datas"):
-    df = carregar_dados_brutos()
+DOWNLOAD_PATH = os.path.join(os.getcwd(), 'relatorios_temp')
 
-    if df is not None:
-        st.divider()
-        # ETAPA 1: INSPECIONAR OS DADOS BRUTOS
-        st.subheader("ETAPA 1: Dados Brutos do Excel")
-        st.write("Estes são os 10 primeiros valores da coluna 'Data da venda' exatamente como lidos do arquivo:")
-        st.code(df['Data da venda'].head(10).to_list())
+if st.button("▶️ Iniciar Extração e Teste Completo"):
+    try:
+        with st.spinner("ETAPA 1/4: Extraindo dados da Saipos... Isso pode levar alguns minutos."):
+            df_bruto = data_handler.extrair_dados_saipos(DOWNLOAD_PATH)
 
-        st.divider()
+        if df_bruto is not None and not df_bruto.empty:
+            st.success("✅ ETAPA 1/4: Extração concluída com sucesso!")
+            with st.expander("Visualizar Dados Brutos (Primeiras 5 linhas)"):
+                st.dataframe(df_bruto.head())
 
-        # ETAPA 2: CONVERTER E VERIFICAR O FUSO HORÁRIO
-        st.subheader("ETAPA 2: Conversão para Datetime")
-        # Converte para datetime, assumindo que o formato é Dia/Mês/Ano
-        df['data_convertida'] = pd.to_datetime(df['Data da venda'], dayfirst=True, errors='coerce')
-        
-        st.write("Os mesmos valores após a conversão com `pd.to_datetime`:")
-        st.code(df['data_convertida'].head(10).to_list())
-        
-        fuso_horario = df['data_convertida'].dt.tz
-        st.write(f"**Fuso Horário (Timezone) detectado automaticamente:** `{fuso_horario}`")
-        if fuso_horario is None:
-            st.info("A data é 'ingênua' (naive), ou seja, não tem fuso horário definido. Isso é o normal e esperado.")
+            with st.spinner("ETAPA 2/4: Tratando e padronizando os dados..."):
+                df_validos, df_cancelados = data_handler.tratar_dados_saipos(df_bruto)
+            
+            st.success("✅ ETAPA 2/4: Tratamento de dados concluído!")
+            with st.expander("Visualizar Dados Válidos Tratados (Primeiras 5 linhas)"):
+                st.dataframe(df_validos.head())
+            with st.expander("Visualizar Dados Cancelados (Primeiras 5 linhas)"):
+                st.dataframe(df_cancelados.head())
+
+            with st.spinner("ETAPA 3/4: Atualizando cache de CEPs..."):
+                cep_handler.atualizar_cache_cep(df_validos)
+            
+            st.success("✅ ETAPA 3/4: Cache de CEPs verificado e/ou atualizado!")
+
+            with st.spinner("ETAPA 4/4: Carregando dados para o Google Sheets..."):
+                data_handler.carregar_dados_para_gsheets(df_validos, df_cancelados)
+            
+            st.success("✅ ETAPA 4/4: Carga para o Google Sheets finalizada!")
+
+            st.balloons()
+            st.header("🎉 Processo finalizado com sucesso!")
+
         else:
-            st.error(f"ALERTA: A data foi interpretada como estando no fuso {fuso_horario}. Esta é provavelmente a causa do problema.")
+            st.error("A extração de dados falhou e não retornou um DataFrame. O processo foi interrompido.")
 
-        st.divider()
-
-        # ETAPA 3: APLICAR FUSO HORÁRIO DE ARACAJU
-        st.subheader("ETAPA 3: Aplicando o Fuso Horário de Aracaju")
-        try:
-            # 'tz_localize' atribui um fuso horário a datas ingênuas.
-            if df['data_convertida'].dt.tz is None:
-                df['data_localizada'] = df['data_convertida'].dt.tz_localize('America/Maceio', ambiguous='infer')
-            else:
-                # Se já tiver um fuso (ex: UTC), converte para o de Aracaju
-                df['data_localizada'] = df['data_convertida'].dt.tz_convert('America/Maceio')
-                
-            st.write("Valores finais após forçar a interpretação no fuso horário de Aracaju (-03:00):")
-            st.code(df['data_localizada'].head(10).to_list())
-            st.success("Compare os horários da ETAPA 1 com esta lista final. Eles devem ser iguais.")
-
-        except Exception as e:
-            st.error(f"Ocorreu um erro ao tentar aplicar o fuso horário: {e}")
-
-    else:
-        st.error("Não foi possível carregar o relatório para a inspeção.")
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado no fluxo principal: {e}")
