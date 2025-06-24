@@ -1,21 +1,33 @@
 import streamlit as st
 import pandas as pd
 import os
+import plotly.graph_objects as go
 from datetime import datetime
 import unicodedata
 import pytz
-import plotly.graph_objects as go
 
-# Importa a função de leitura do nosso outro módulo
-from modules.sheets_handler import read_data_from_sheet
+# Esta função de formatação é uma utilidade geral
+def format_currency(value):
+    """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
+    if pd.isna(value):
+        return "R$ 0,00"
+    s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    return f"R$ {s}"
 
+# As funções de carregamento de dados ficam aqui
 @st.cache_data
 def carregar_dados_brutos():
-    """
-    Função principal para carregar os dados. 
-    Agora ela lê DIRETAMENTE da Planilha Google via o sheets_handler.
-    """
-    return read_data_from_sheet()
+    """Carrega o relatório .xlsx mais recente, lendo a data como texto."""
+    caminho_relatorios = 'relatorios_saipos'
+    if not os.path.exists(caminho_relatorios): return None
+    arquivos_xlsx = [f for f in os.listdir(caminho_relatorios) if f.endswith('.xlsx')]
+    if not arquivos_xlsx: return None
+    caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
+    try:
+        return pd.read_excel(caminho_completo, dtype={'Data da venda': str})
+    except Exception as e:
+        st.error(f"Erro ao ler o arquivo de relatório: {e}")
+        return None
 
 @st.cache_data
 def carregar_base_ceps():
@@ -37,7 +49,7 @@ def padronizar_texto(texto):
     return texto.strip().upper()
 
 def tratar_dados(df):
-    """Aplica todas as transformações, incluindo a correção de fuso horário."""
+    """Aplica todas as transformações, incluindo a correção de fuso horário e o formato de data correto."""
     if df is None: return None, None
     
     df.columns = [str(col) for col in df.columns]
@@ -49,25 +61,15 @@ def tratar_dados(df):
     df_cancelados = df[df['Esta cancelado'] == 'S'].copy()
     df_validos = df[df['Esta cancelado'] == 'N'].copy()
     
-    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce') # dayfirst=False pois o Google Sheets usa M/D/A
+    # --- CORREÇÃO DE DATA/HORA APLICADA AQUI ---
+    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # IMPORTANTE: A planilha Google já pode estar em UTC. Se os horários ainda estiverem errados,
-    # podemos precisar remover ou ajustar a linha de subtração de 3 horas.
-    # Por enquanto, mantemos para consistência.
-    try:
-        df_validos['Data da venda'] = df_validos['Data da venda'] - pd.Timedelta(hours=3)
-    except TypeError:
-        # Ignora o erro se a data já tiver fuso horário
-        pass
-
+    df_validos['Data da venda'] = df_validos['Data da venda'] - pd.Timedelta(hours=3)
+    
     fuso_aracaju = pytz.timezone('America/Maceio')
-    # Se a data já tiver um fuso, converte. Se não, localiza.
-    if df_validos['Data da venda'].dt.tz is not None:
-        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
-    else:
-        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju, ambiguous='infer')
-
+    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju, ambiguous='infer')
+    
     hoje = datetime.now(fuso_aracaju)
     df_validos = df_validos[df_validos['Data da venda'] <= hoje]
 
