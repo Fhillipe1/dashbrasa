@@ -11,7 +11,7 @@ import gspread
 from gspread_dataframe import get_as_dataframe
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente (para senhas e nomes de arquivos)
+# Carrega variáveis de ambiente (essencial para rodar localmente)
 load_dotenv()
 
 # Configuração da página
@@ -28,7 +28,7 @@ def format_currency(value):
 
 @st.cache_data
 def carregar_dados_das_planilhas():
-    """Lê os dados diretamente da Planilha Google, nossa única fonte da verdade."""
+    """Lê os dados das duas abas da Planilha Google de forma robusta."""
     print("Iniciando carregamento de dados da Planilha Google...")
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
@@ -52,19 +52,15 @@ def carregar_dados_das_planilhas():
         spreadsheet = gc.open(sheet_name)
         worksheets = spreadsheet.worksheets()
         
-        # Lê a primeira aba (índice 0) para Vendas Válidas
         if len(worksheets) > 0:
             worksheet_validos = worksheets[0]
             df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
             df_validos.dropna(how='all', axis=1, inplace=True)
-            print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
         
-        # Lê a segunda aba (índice 1) para Vendas Canceladas, se existir
         if len(worksheets) > 1:
             worksheet_cancelados = worksheets[1]
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
             df_cancelados.dropna(how='all', axis=1, inplace=True)
-            print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
             
         return df_validos, df_cancelados
     except Exception as e:
@@ -84,39 +80,43 @@ def carregar_base_ceps():
         return df
     return None
 
-def padronizar_texto(texto):
-    """Função para limpar e padronizar texto."""
-    if not isinstance(texto, str): return texto
-    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return texto.strip().upper()
-
-def tratar_dados(df_validos, df_cancelados):
-    """Aplica as transformações de tipo de dado e fuso horário nos dados lidos da planilha."""
+def tratar_dados_pos_leitura(df_validos, df_cancelados):
+    """
+    Aplica as transformações de tipo de dado e fuso horário, assumindo que os dados da planilha estão em UTC.
+    """
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
 
     df_validos = df_validos.copy()
-
-    # Garante que colunas de data e numéricas lidas da planilha (que podem vir como texto) sejam convertidas
-    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
+    
+    # --- LÓGICA DE CORREÇÃO DE DATA E FUSO HORÁRIO ---
+    # 1. Converte a coluna para datetime, FORÇANDO o formato Dia/Mês/Ano
+    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
-
+    
+    # 2. Assume que a hora lida é UTC e converte para o fuso de Aracaju.
     fuso_aracaju = pytz.timezone('America/Maceio')
     if df_validos['Data da venda'].dt.tz is None:
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_aracaju)
     else:
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
-    
+
+    # 3. Agora que a data está 100% correta, criamos as outras colunas
     df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
     df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
-    
+
+    # Garante que colunas numéricas sejam do tipo correto
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
+            
+    def padronizar_texto(texto):
+        if not isinstance(texto, str): return ""
+        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
 
     delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
     if 'Canal de venda' in df_validos.columns:
@@ -128,7 +128,7 @@ def tratar_dados(df_validos, df_cancelados):
     return df_validos, df_cancelados
 
 def create_gradient_line_chart(df_data):
-    """Cria um gráfico de linha com cores de gradiente para subidas e descidas."""
+    """Cria um gráfico de linha com cores de gradiente."""
     df_data = df_data.copy()
     df_data['Data'] = pd.to_datetime(df_data['Data'])
     df_data = df_data.sort_values(by='Data')
@@ -146,9 +146,10 @@ def create_gradient_line_chart(df_data):
         marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
         hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
     ))
-    fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
+    fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20),
+                      xaxis_range=[df_data['Data'].min(), df_data['Data'].max()])
     return fig
-    
+
 # --- Início da Interface do Streamlit ---
 col_logo, col_title = st.columns([1, 25])
 with col_logo:
@@ -158,11 +159,11 @@ with col_title:
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
     df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados(df_validos_raw, df_cancelados_raw)
+    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None or df_validos.empty:
-    st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique se a planilha tem dados ou execute a atualização.")
+    st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
     st.stop()
 
 # --- Corpo Principal do Dashboard ---
