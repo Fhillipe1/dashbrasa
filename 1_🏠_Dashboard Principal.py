@@ -56,7 +56,7 @@ def padronizar_texto(texto):
     return texto.strip().upper()
 
 def tratar_dados(df):
-    """Aplica todas as transformações, incluindo a correção de fuso horário."""
+    """Aplica todas as transformações, incluindo a criação da coluna 'Dia da Semana'."""
     if df is None: return None, None
     if 'Pedido' in df.columns: df['Pedido'] = df['Pedido'].astype(str)
     if 'CEP' in df.columns: df['CEP'] = df['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
@@ -65,58 +65,48 @@ def tratar_dados(df):
     df_cancelados = df[df['Esta cancelado'] == 'S'].copy()
     df_validos = df[df['Esta cancelado'] == 'N'].copy()
     
-    # --- LÓGICA DE DATA/HORA ATUALIZADA E ROBUSTA ---
-    # 1. Converte para datetime "ingênuo", como antes
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # 2. Define o fuso horário correto de Aracaju
     fuso_aracaju = pytz.timezone('America/Maceio')
+    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju, ambiguous='infer')
     
-    # 3. Localiza as datas "ingênuas", aplicando o fuso horário de Aracaju
-    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju)
-    
-    # 4. Pega a hora de "agora" no mesmo fuso horário para uma comparação justa
     hoje = datetime.now(fuso_aracaju)
     df_validos = df_validos[df_validos['Data da venda'] <= hoje]
 
-    # 5. Extrai a data e a hora (agora corretas e com fuso)
     df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
-    # O resto da função continua igual
+    # --- CORREÇÃO: Garante que 'Dia da Semana' seja criada ---
+    day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
+    df_validos['Dia da Semana'] = df_validos['Data da venda'].dt.weekday.map(day_map)
+    
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
 
     delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
-    df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(
-        lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone'
-    )
+    df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
     return df_validos, df_cancelados
 
 def create_gradient_line_chart(df_data):
     """Cria um gráfico de linha com cores de gradiente para subidas e descidas."""
     df_data = df_data.sort_values(by='Data')
     df_data['diff'] = df_data['Total'].diff().fillna(0)
-    
     fig = go.Figure()
     color_subida = '#5D9C59'; color_descida = '#DF2E38'
-
     for i in range(1, len(df_data)):
         fig.add_trace(go.Scatter(
-            x=df_data['Data'].iloc[i-1:i+1], y=df_data['Total'].iloc[i-1:i+1], mode='lines',
+            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
             line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
             hoverinfo='none'
         ))
-
     fig.add_trace(go.Scatter(
         x=df_data['Data'], y=df_data['Total'], mode='markers',
         marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
         hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
     ))
-
     fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
