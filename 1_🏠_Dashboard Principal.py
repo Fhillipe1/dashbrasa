@@ -7,24 +7,15 @@ import pydeck as pdk
 from datetime import datetime
 import unicodedata
 import pytz
-from modules.utils import carregar_dados_brutos, tratar_dados, carregar_base_ceps, create_gradient_line_chart
+from modules.utils import (
+    format_currency,
+    carregar_dados_brutos,
+    carregar_base_ceps,
+    tratar_dados,
+    create_gradient_line_chart
+)
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
-
-# --- Funções Auxiliares ---
-
-def format_currency(value):
-    """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
-    if pd.isna(value):
-        return "R$ 0,00"
-    s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
-    return f"R$ {s}"
-
-def format_currency(value):
-    if pd.isna(value): return "R$ 0,00"
-    s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
-    return f"R$ {s}"
-
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
     # A função carregar_dados_brutos agora busca os dados da Planilha Google
