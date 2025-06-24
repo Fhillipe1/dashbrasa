@@ -9,11 +9,14 @@ import unicodedata
 import pytz
 import gspread
 from gspread_dataframe import get_as_dataframe
+from dotenv import load_dotenv
+# Carrega as variáveis de ambiente (para senhas e nomes de arquivos)
+load_dotenv()
 
 # --- CORREÇÃO: ÍCONE DA PÁGINA RESTAURADO ---
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
 
-# --- Funções Auxiliares ---
+# --- INÍCIO DE TODAS AS FUNÇÕES AUXILIARES ---
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -58,7 +61,9 @@ def carregar_dados_das_planilhas():
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
             df_cancelados.dropna(how='all', axis=1, inplace=True)
             print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
-        
+        else:
+            print("Aba de cancelados não encontrada. Continuando sem dados de cancelamento.")
+            
         return df_validos, df_cancelados
     except Exception as e:
         st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
@@ -84,52 +89,33 @@ def tratar_dados_pos_leitura(df_validos, df_cancelados):
 
     df_validos = df_validos.copy()
     
-    # Garante que os tipos de dados lidos da planilha estejam corretos para manipulação
+    # Como a planilha pode salvar a data como texto, fazemos a conversão aqui
+    # Esta é a função que continha o erro
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    df_validos['Data'] = pd.to_datetime(df_validos['Data da venda']).dt.date
-
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Cria a coluna 'Hora' a partir da 'Data da venda' antes de usá-la.
+    df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
+    # Recria a coluna 'Dia da Semana' a partir da data já corrigida
+    day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
+    df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
+
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
-            
-    # Recria colunas categóricas que podem não ter vindo da planilha
-    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
+    
     def padronizar_texto(texto):
         if not isinstance(texto, str): return texto
-        texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-        return texto.strip().upper()
+        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
+
+    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
     df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
-
-
+    
     return df_validos, df_cancelados
 
-def create_gradient_line_chart(df_data):
-    """Cria um gráfico de linha com cores de gradiente."""
-    df_data['Data'] = pd.to_datetime(df_data['Data'])
-    df_data = df_data.sort_values(by='Data')
-    df_data['diff'] = df_data['Total'].diff().fillna(0)
-    fig = go.Figure()
-    color_subida = '#5D9C59'; color_descida = '#DF2E38'
-    for i in range(1, len(df_data)):
-        fig.add_trace(go.Scatter(
-            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
-            line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
-            hoverinfo='none'
-        ))
-    fig.add_trace(go.Scatter(
-        x=df_data['Data'], y=df_data['Total'], mode='markers',
-        marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
-        hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
-    return fig
+# --- FIM DAS FUNÇÕES AUXILIARES ---
 
 # --- Início da Interface ---
 # --- CORREÇÃO: TÍTULO COM LOGO RESTAURADO ---
