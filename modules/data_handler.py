@@ -51,6 +51,13 @@ def extrair_dados_saipos(download_path):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("window-size=1920,1080")
+
+    # --- TÉCNICAS DE CAMUFLAGEM ---
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+    chrome_options.add_argument(f'user-agent={user_agent}')
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     
     prefs = {'download.default_directory': download_path}
     chrome_options.add_experimental_option('prefs', prefs)
@@ -60,26 +67,25 @@ def extrair_dados_saipos(download_path):
         st.write("Configurando o ChromeDriver com webdriver-manager para Chromium...")
         service = ChromeService(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
         
-        st.write("Inicializando o robô (WebDriver)...")
+        st.write("Inicializando o robô (WebDriver) em modo 'camuflado'...")
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # Adiciona um script para proteger a detecção de automação
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
         wait = WebDriverWait(driver, 40)
 
         st.write("Acessando a página de login da Saipos...")
         driver.get(SAIPOS_LOGIN_URL)
 
-        # --- AJUSTE DE ROBUSTEZ ---
-        # Espera até que o campo de e-mail esteja VISÍVEL na tela
         st.write("Aguardando campo de e-mail ficar visível...")
         email_field = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input[placeholder='E-mail']")))
         st.write("Campo de e-mail encontrado. Preenchendo...")
         email_field.send_keys(SAIPOS_USER)
 
-        # Preenche a senha
         password_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']")
         password_field.send_keys(SAIPOS_PASSWORD)
 
-        # --- AJUSTE DE ROBUSTEZ ---
-        # Espera até que o BOTÃO DE LOGIN esteja CLICÁVEL
         st.write("Aguardando botão de login ficar clicável...")
         login_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[ng-click='lctrl.login()']")))
         st.write("Botão encontrado. Clicando para fazer login...")
