@@ -129,7 +129,6 @@ def sync_with_google_sheets(df_validos, df_cancelados):
 def run_extraction():
     """Função que executa o ciclo ETL: Extrai, Transforma e Carrega."""
     
-    # Parâmetros
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
     REPORT_URL = 'https://conta.saipos.com/#/app/report/sales-by-period'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
@@ -141,7 +140,6 @@ def run_extraction():
         else:
             for nome_arquivo in os.listdir(caminho_da_pasta): os.remove(os.path.join(caminho_da_pasta, nome_arquivo))
     
-    # Configurações do WebDriver
     chrome_options = Options(); service = Service("/usr/bin/chromedriver")
     chrome_options.add_argument("--headless"); chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage"); chrome_options.add_argument("--disable-gpu")
@@ -161,15 +159,17 @@ def run_extraction():
         driver.find_element(By.CSS_SELECTOR, "i.zmdi-arrow-forward").click()
         print("Formulário de login enviado.")
         
-        time.sleep(5) # Pausa crucial para o processamento do login
+        time.sleep(7) # Pausa generosa para o processamento do login
 
-        # --- CORREÇÃO FINAL: NAVEGAÇÃO DIRETA ---
+        # ETAPA 2: NAVEGAÇÃO DIRETA E ESPERA INTELIGENTE
         print(f"Login processado. Navegando diretamente para a página de relatórios: {REPORT_URL}")
         driver.get(REPORT_URL)
 
-        # ETAPA 2: FILTRO E DOWNLOAD
-        print("Aguardando e preenchendo os campos de data...")
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
+        print("Aguardando página de relatório carregar (esperando pelo botão 'Buscar')...")
+        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]')))
+        print("Página de relatório carregada com sucesso.")
+
+        # ETAPA 3: FILTRO E DOWNLOAD
         campos_de_data = driver.find_elements(By.CSS_SELECTOR, "input[id='datePickerSaipos']")
         if len(campos_de_data) < 2: raise Exception("Campos de data não encontrados.")
         
