@@ -9,10 +9,6 @@ import unicodedata
 import pytz
 import gspread
 from gspread_dataframe import get_as_dataframe
-from dotenv import load_dotenv
-
-# Carrega as variáveis de ambiente (para senhas e nomes de arquivos)
-load_dotenv()
 
 # --- CORREÇÃO: ÍCONE DA PÁGINA RESTAURADO ---
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
@@ -28,12 +24,11 @@ def format_currency(value):
 
 @st.cache_data
 def carregar_dados_das_planilhas():
-    """Lê os dados das abas da Planilha Google de forma robusta."""
+    """Lê os dados das duas abas da Planilha Google de forma robusta."""
     print("Iniciando carregamento de dados da Planilha Google...")
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
     try:
-        # Autenticação
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
@@ -50,28 +45,20 @@ def carregar_dados_das_planilhas():
             return None, None
         
         spreadsheet = gc.open(sheet_name)
-        
-        # --- LÓGICA DE LEITURA ROBUSTA ---
         worksheets = spreadsheet.worksheets()
         
-        # Lê a primeira aba (índice 0) para Vendas Válidas
         if len(worksheets) > 0:
             worksheet_validos = worksheets[0]
             df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
             df_validos.dropna(how='all', axis=1, inplace=True)
             print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
         
-        # Lê a segunda aba (índice 1) para Vendas Canceladas, APENAS SE ELA EXISTIR
         if len(worksheets) > 1:
             worksheet_cancelados = worksheets[1]
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
             df_cancelados.dropna(how='all', axis=1, inplace=True)
             print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
-        else:
-            print("Aba de cancelados não encontrada. Continuando sem dados de cancelamento.")
-            # Cria um DataFrame vazio para não quebrar o resto do código
-            df_cancelados = pd.DataFrame()
-            
+        
         return df_validos, df_cancelados
     except Exception as e:
         st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
@@ -102,12 +89,24 @@ def tratar_dados_pos_leitura(df_validos, df_cancelados):
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
     df_validos['Data'] = pd.to_datetime(df_validos['Data da venda']).dt.date
-    df_validos['Hora'] = pd.to_numeric(df_validos['Hora'])
+
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Cria a coluna 'Hora' a partir da 'Data da venda' antes de usá-la.
+    df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
+            
+    # Recria colunas categóricas que podem não ter vindo da planilha
+    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
+    def padronizar_texto(texto):
+        if not isinstance(texto, str): return texto
+        texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+        return texto.strip().upper()
+    df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
+
 
     return df_validos, df_cancelados
 
