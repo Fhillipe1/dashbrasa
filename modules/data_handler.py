@@ -17,10 +17,11 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-# --- NOVA ABORDAGEM COM WEBDRIVER-MANAGER ---
+# --- ABORDAGEM COM WEBDRIVER-MANAGER ---
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.core.utils import ChromeType # Importa o tipo de Chrome
+# --- LINHA CORRIGIDA ABAIXO ---
+from webdriver_manager.core.os_manager import ChromeType # Importa o tipo de Chrome
 
 # --- FUNÇÕES DE AUTENTICAÇÃO E CONEXÃO ---
 
@@ -58,9 +59,7 @@ def extrair_dados_saipos(download_path):
     driver = None
     
     try:
-        # --- AJUSTE CRÍTICO USANDO WEBDRIVER-MANAGER ---
         st.write("Configurando o ChromeDriver com webdriver-manager para Chromium...")
-        # Instala o driver para a versão 'chromium' do navegador
         service = ChromeService(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
         
         st.write("Inicializando o robô (WebDriver)...")
@@ -123,7 +122,7 @@ def extrair_dados_saipos(download_path):
             driver.quit()
 
 # --- FUNÇÕES DE TRANSFORMAÇÃO DE DADOS ---
-# (O restante do arquivo permanece o mesmo)
+# (O restante do arquivo permanece o mesmo, não há necessidade de mudar)
 
 def _padronizar_texto(texto):
     if not isinstance(texto, str):
