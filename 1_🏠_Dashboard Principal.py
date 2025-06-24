@@ -14,14 +14,14 @@ from dotenv import load_dotenv
 # Carrega variáveis de ambiente (essencial para rodar localmente)
 load_dotenv()
 
-# --- Configuração da Página ---
-st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="🔥", layout="wide")
+# Configuração da página
+st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
 
 # --- Funções Auxiliares ---
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
-    if pd.isna(value):
+    if pd.isna(value) or not isinstance(value, (int, float)):
         return "R$ 0,00"
     s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
     return f"R$ {s}"
@@ -33,7 +33,6 @@ def carregar_dados_das_planilhas():
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
     try:
-        # Lógica de autenticação que funciona tanto na nuvem quanto localmente
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
@@ -82,8 +81,7 @@ def carregar_base_ceps():
 
 def tratar_dados_pos_leitura(df_validos, df_cancelados):
     """
-    Aplica as transformações de tipo de dado e fuso horário necessárias,
-    assumindo que os dados da planilha estão em UTC.
+    Aplica as transformações de tipo de dado e fuso horário, assumindo que os dados da planilha estão em UTC.
     """
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
@@ -91,11 +89,11 @@ def tratar_dados_pos_leitura(df_validos, df_cancelados):
     df_validos = df_validos.copy()
     
     # --- LÓGICA DE CORREÇÃO DE FUSO HORÁRIO NA LEITURA ---
-    # 1. Converte a coluna para datetime.
+    # 1. Converte a coluna de texto para datetime.
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # 2. Assume que a data lida da planilha é UTC e a converte para o fuso de Aracaju
+    # 2. Assume que a data lida da planilha é UTC e a CONVERTE para o fuso de Aracaju.
     fuso_aracaju = pytz.timezone('America/Maceio')
     
     # Se a data for "ingênua" (sem fuso), primeiro atribuímos o fuso UTC, depois convertemos.
@@ -116,32 +114,18 @@ def tratar_dados_pos_leitura(df_validos, df_cancelados):
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
+            
+    def padronizar_texto(texto):
+        if not isinstance(texto, str): return texto
+        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
+
+    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
+    if 'Canal de venda' in df_validos.columns:
+        df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
 
     return df_validos, df_cancelados
 
-# --- O resto do código (Interface e outras funções) permanece o mesmo ---
-# ... (código completo abaixo para garantir)
-def create_gradient_line_chart(df_data):
-    df_data['Data'] = pd.to_datetime(df_data['Data'])
-    df_data = df_data.sort_values(by='Data')
-    df_data['diff'] = df_data['Total'].diff().fillna(0)
-    fig = go.Figure()
-    color_subida = '#5D9C59'; color_descida = '#DF2E38'
-    for i in range(1, len(df_data)):
-        fig.add_trace(go.Scatter(
-            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
-            line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
-            hoverinfo='none'
-        ))
-    fig.add_trace(go.Scatter(
-        x=df_data['Data'], y=df_data['Total'], mode='markers',
-        marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
-        hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
-    ))
-    fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
-    return fig
-
-# --- Início da Interface ---
+# --- Início da Interface do Streamlit ---
 st.title("🔥 Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
@@ -152,6 +136,7 @@ with st.spinner("Conectando à Planilha Google e processando dados..."):
 if df_validos is None or df_validos.empty:
     st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
     st.stop()
+
 
 # --- Corpo Principal do Dashboard ---
 st.success("Dados carregados e processados com sucesso!")
