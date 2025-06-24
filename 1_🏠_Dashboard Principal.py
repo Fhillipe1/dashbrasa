@@ -7,12 +7,6 @@ import pydeck as pdk
 from datetime import datetime
 import unicodedata
 import pytz
-import gspread
-from gspread_dataframe import get_as_dataframe
-from dotenv import load_dotenv
-
-# Carrega variáveis de ambiente (essencial para rodar localmente)
-load_dotenv()
 
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
@@ -21,50 +15,24 @@ st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https:/
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
-    if pd.isna(value) or not isinstance(value, (int, float)):
+    if pd.isna(value):
         return "R$ 0,00"
     s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
     return f"R$ {s}"
 
 @st.cache_data
-def carregar_dados_das_planilhas():
-    """Lê os dados das duas abas da Planilha Google de forma robusta."""
-    print("Iniciando carregamento de dados da Planilha Google...")
-    df_validos = pd.DataFrame()
-    df_cancelados = pd.DataFrame()
+def carregar_dados_brutos():
+    """Carrega o relatório .xlsx mais recente da pasta 'relatorios_saipos'."""
+    caminho_relatorios = 'relatorios_saipos'
+    if not os.path.exists(caminho_relatorios): return None
+    arquivos_xlsx = [f for f in os.listdir(caminho_relatorios) if f.endswith('.xlsx')]
+    if not arquivos_xlsx: return None
+    caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
     try:
-        if "google_credentials" in st.secrets:
-            creds_dict = st.secrets.get("google_credentials")
-            gc = gspread.service_account_from_dict(creds_dict)
-        else:
-            credentials_file = "google_credentials.json"
-            if not os.path.exists(credentials_file):
-                st.error(f"ERRO: Arquivo de credenciais '{credentials_file}' não encontrado.")
-                return None, None
-            gc = gspread.service_account(filename=credentials_file)
-
-        sheet_name = st.secrets.get("GOOGLE_SHEET_NAME") or os.getenv("GOOGLE_SHEET_NAME")
-        if not sheet_name:
-            st.error("ERRO: GOOGLE_SHEET_NAME não configurado.")
-            return None, None
-        
-        spreadsheet = gc.open(sheet_name)
-        worksheets = spreadsheet.worksheets()
-        
-        if len(worksheets) > 0:
-            worksheet_validos = worksheets[0]
-            df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
-            df_validos.dropna(how='all', axis=1, inplace=True)
-        
-        if len(worksheets) > 1:
-            worksheet_cancelados = worksheets[1]
-            df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
-            df_cancelados.dropna(how='all', axis=1, inplace=True)
-            
-        return df_validos, df_cancelados
+        return pd.read_excel(caminho_completo, dtype={'Data da venda': str})
     except Exception as e:
-        st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
-        return None, None
+        st.error(f"Erro ao ler o arquivo de relatório: {e}")
+        return None
 
 @st.cache_data
 def carregar_base_ceps():
@@ -79,133 +47,191 @@ def carregar_base_ceps():
         return df
     return None
 
-def tratar_dados_pos_leitura(df_validos, df_cancelados):
-    """
-    Aplica as transformações de tipo de dado e fuso horário, assumindo que os dados da planilha estão em UTC.
-    """
-    if df_validos is None or df_validos.empty:
-        return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
+def padronizar_texto(texto):
+    """Função para limpar e padronizar texto."""
+    if not isinstance(texto, str): return texto
+    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return texto.strip().upper()
 
-    df_validos = df_validos.copy()
+def tratar_dados(df):
+    """Aplica todas as transformações, incluindo a correção de fuso horário e o formato de data correto."""
+    if df is None: return None, None
+    if 'Pedido' in df.columns: df['Pedido'] = df['Pedido'].astype(str)
+    if 'CEP' in df.columns: df['CEP'] = df['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
+    if 'Bairro' in df.columns: df['Bairro'] = df['Bairro'].astype(str).apply(padronizar_texto)
     
-    # --- LÓGICA DE CORREÇÃO DE FUSO HORÁRIO NA LEITURA ---
-    # 1. Converte a coluna de texto para datetime.
-    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
+    df_cancelados = df[df['Esta cancelado'] == 'S'].copy()
+    df_validos = df[df['Esta cancelado'] == 'N'].copy()
+    
+    df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # 2. Assume que a data lida da planilha é UTC e a CONVERTE para o fuso de Aracaju.
-    fuso_aracaju = pytz.timezone('America/Maceio')
+    df_validos['Data da venda'] = df_validos['Data da venda'] - pd.Timedelta(hours=3)
     
-    # Se a data for "ingênua" (sem fuso), primeiro atribuímos o fuso UTC, depois convertemos.
-    if df_validos['Data da venda'].dt.tz is None:
-        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_aracaju)
-    else: # Se já tiver um fuso, apenas convertemos para o de Aracaju
-        df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
+    fuso_aracaju = pytz.timezone('America/Maceio')
+    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju, ambiguous='infer')
+    
+    hoje = datetime.now(fuso_aracaju)
+    df_validos = df_validos[df_validos['Data da venda'] <= hoje]
 
-    # 3. Agora que a data está 100% correta, criamos as outras colunas
     df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
     df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
-
-    # Garante que colunas numéricas sejam do tipo correto
+    
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
-            
-    def padronizar_texto(texto):
-        if not isinstance(texto, str): return texto
-        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
 
     delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
-    if 'Canal de venda' in df_validos.columns:
-        df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
-
+    df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(
+        lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone'
+    )
     return df_validos, df_cancelados
 
+def create_gradient_line_chart(df_data):
+    """Cria um gráfico de linha com cores de gradiente e eixo ajustado."""
+    df_data['Data'] = pd.to_datetime(df_data['Data'])
+    df_data = df_data.sort_values(by='Data')
+    df_data['diff'] = df_data['Total'].diff().fillna(0)
+    fig = go.Figure()
+    color_subida = '#5D9C59'; color_descida = '#DF2E38'
+    for i in range(1, len(df_data)):
+        fig.add_trace(go.Scatter(
+            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
+            line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
+            hoverinfo='none'
+        ))
+    fig.add_trace(go.Scatter(
+        x=df_data['Data'], y=df_data['Total'], mode='markers',
+        marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
+        hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
+    ))
+    # --- CORREÇÃO DO EIXO APLICADA AQUI ---
+    fig.update_layout(
+        showlegend=False, height=350, 
+        yaxis_title="Faturamento (R$)", 
+        xaxis_title=None, 
+        margin=dict(l=20, r=20, t=20, b=20),
+        xaxis=dict(range=[df_data['Data'].min(), df_data['Data'].max()])
+    )
+    return fig
+    
 # --- Início da Interface do Streamlit ---
-st.title("🔥 Dashboard de Vendas La Brasa")
+col_logo, col_title = st.columns([1, 25])
+with col_logo:
+    st.image("https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", width=50)
+with col_title:
+    st.title("Dashboard de Vendas La Brasa")
 
-with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
+with st.spinner("Carregando e processando dados..."):
+    # Para corrigir o problema das datas, temporariamente voltamos a ler o arquivo local
+    # pois a lógica de correção está mais fácil de aplicar aqui.
+    df_bruto = carregar_dados_brutos()
+    df_validos, df_cancelados = tratar_dados(df_bruto)
     df_ceps_database = carregar_base_ceps()
 
-if df_validos is None or df_validos.empty:
-    st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
+if df_bruto is None:
+    st.error("Nenhum relatório da Saipos encontrado. Execute a atualização na página 'Atualizar Relatório'.")
     st.stop()
 
+if df_validos is not None:
+    st.success("Dados processados com sucesso!")
 
-# --- Corpo Principal do Dashboard ---
-st.success("Dados carregados e processados com sucesso!")
-with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
-    col_filtro1, col_filtro2 = st.columns(2)
-    with col_filtro1:
-        data_min = df_validos['Data'].min(); data_max = df_validos['Data'].max()
-        data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
-    with col_filtro2:
-        # Garante que a coluna exista antes de tentar acessá-la
-        if 'Canal de venda' in df_validos.columns:
+    with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
+        col_filtro1, col_filtro2 = st.columns(2)
+        with col_filtro1:
+            data_min = df_validos['Data'].min(); data_max = df_validos['Data'].max()
+            data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
+        with col_filtro2:
             opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
             canal_selecionado = st.multiselect("Selecione o Canal de Venda", options=opcoes_canal, default=opcoes_canal)
-        else:
-            canal_selecionado = []
+    
+    if len(data_selecionada) != 2: st.stop()
+    
+    start_date, end_date = data_selecionada
+    df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
+    
+    # --- RESTAURAÇÃO DE TODAS AS SEÇÕES ---
+    abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
 
-if len(data_selecionada) != 2: st.stop()
+    with abas[0]:
+        st.subheader("Resumo do Período Selecionado")
+        col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+        total_itens = df_filtrado['Itens'].sum(); total_taxas = df_filtrado['Total taxa de serviço'].sum(); faturamento_total = df_filtrado['Total'].sum()
+        with col_kpi1: st.metric(label="💰 Total em Itens", value=format_currency(total_itens))
+        with col_kpi2: st.metric(label="➕ Total em Taxas", value=format_currency(total_taxas))
+        with col_kpi3: st.metric(label="📈 FATURAMENTO TOTAL", value=format_currency(faturamento_total))
+        st.divider()
+        st.subheader("Evolução do Faturamento Diário")
+        faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
+        if not faturamento_diario.empty and len(faturamento_diario) > 1:
+            fig_faturamento = create_gradient_line_chart(faturamento_diario)
+            st.plotly_chart(fig_faturamento, use_container_width=True)
 
-start_date, end_date = data_selecionada
-# Filtro base
-df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date)]
-# Filtro de canal condicional
-if 'Canal de venda' in df_filtrado.columns and canal_selecionado:
-    df_filtrado = df_filtrado[df_filtrado['Canal de venda'].fillna('Não especificado').isin(canal_selecionado)]
-
-st.session_state['df_filtrado'] = df_filtrado
-abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
-
-with abas[0]:
-    st.subheader("Resumo do Período Selecionado")
-    col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-    faturamento_total = df_filtrado['Total'].sum()
-    with col_kpi1: st.metric(label="📈 FATURAMENTO TOTAL", value=format_currency(faturamento_total))
-    with col_kpi2: st.metric(label="Total de Pedidos Válidos", value=df_filtrado['Pedido'].nunique())
-    with col_kpi3: 
-        if df_filtrado['Pedido'].nunique() > 0:
-            st.metric(label="Ticket Médio", value=format_currency(faturamento_total / df_filtrado['Pedido'].nunique()))
-    st.divider()
-    st.subheader("Evolução do Faturamento no Período")
-    faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
-    if not faturamento_diario.empty and len(faturamento_diario) > 1:
-        st.plotly_chart(create_gradient_line_chart(faturamento_diario), use_container_width=True)
-
-with abas[1]:
-    st.header("Análise de Delivery")
-    df_delivery = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
-    if not df_delivery.empty:
-        if df_ceps_database is not None:
+    with abas[1]:
+        st.header("Análise de Delivery")
+        df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
+        if not df_delivery_filtrado.empty:
+            df_delivery_geral = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
+            st.subheader("Performance de Entregas por Bairro")
+            st.caption("O percentual (Δ) compara a média de 'Pedidos por Dia' no período com a média histórica daquele bairro.")
+            media_taxa_filtrada = df_delivery_filtrado['Entrega'].mean()
+            media_taxa_geral = df_delivery_geral['Entrega'].mean()
+            delta_taxa = ((media_taxa_filtrada - media_taxa_geral) / media_taxa_geral * 100) if media_taxa_geral > 0 else 0
+            total_arrecadado_entregas = df_delivery_filtrado['Entrega'].sum()
+            numero_de_entregas = len(df_delivery_filtrado)
+            ticket_medio_delivery = df_delivery_filtrado['Total'].mean()
+            top_bairros_filtrado = df_delivery_filtrado.groupby('Bairro').agg(Pedidos=('Pedido', 'count'), Valor_Total=('Total', 'sum'), Taxa_Entrega_Total=('Entrega', 'sum')).sort_values(by='Pedidos', ascending=False).head(3)
+            pedidos_diarios_geral_bairro = df_delivery_geral.groupby(['Bairro', 'Data'])['Pedido'].count().reset_index()
+            media_geral_bairro = pedidos_diarios_geral_bairro.groupby('Bairro')['Pedido'].mean()
+            pedidos_diarios_filtrado_bairro = df_delivery_filtrado.groupby(['Bairro', 'Data'])['Pedido'].count().reset_index()
+            media_filtrada_bairro = pedidos_diarios_filtrado_bairro.groupby('Bairro')['Pedido'].mean()
+            col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+            with col_d1:
+                with st.container(border=True, height=300):
+                    st.markdown("##### Métricas Gerais Delivery")
+                    st.markdown(f"**{numero_de_entregas}** entregas totais")
+                    st.markdown(f"**{format_currency(total_arrecadado_entregas)}** em taxas")
+                    st.markdown(f"**{format_currency(ticket_medio_delivery)}** de ticket médio")
+                    st.metric(label="Taxa Média por Entrega", value=format_currency(media_taxa_filtrada), delta=f"{delta_taxa:.1f}%", delta_color="inverse")
+            card_cols_bairro = [col_d2, col_d3, col_d4]
+            for i, (bairro, row) in enumerate(top_bairros_filtrado.iterrows()):
+                if i < len(card_cols_bairro):
+                    with card_cols_bairro[i]:
+                        with st.container(border=True, height=300):
+                            st.markdown(f"##### Top {i+1}º: {bairro}")
+                            st.markdown(f"**{row['Pedidos']}** pedidos")
+                            st.markdown(f"**{format_currency(row['Valor_Total'])}** em vendas")
+                            st.markdown(f"**{format_currency(row['Taxa_Entrega_Total'])}** em taxas")
+                            media_geral = media_geral_bairro.get(bairro, 0)
+                            media_filtrada = media_filtrada_bairro.get(bairro, 0)
+                            delta_pedidos = ((media_filtrada - media_geral) / media_geral * 100) if media_geral > 0 else 0
+                            st.metric(label="Pedidos/dia (vs. média)", value=f"{media_filtrada:.1f}", delta=f"{delta_pedidos:.1f}%")
+            st.divider()
             st.markdown("##### Mapa de Calor de Pedidos por CEP")
-            pedidos_por_cep = df_delivery['CEP'].dropna().value_counts().reset_index()
-            pedidos_por_cep.columns = ['CEP', 'num_pedidos']
-            map_data = pd.merge(pedidos_por_cep, df_ceps_database, left_on='CEP', right_on='cep', how='inner')
-            if not map_data.empty:
-                map_data.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True, errors='ignore')
-                st.pydeck_chart(pdk.Deck(
-                    map_style=None,
-                    initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
-                    layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=40)],
-                    tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
-            else:
-                st.warning("Nenhum CEP do relatório foi encontrado no seu cache. Rode `build_cep_cache.py` para atualizar.")
+            if df_ceps_database is not None:
+                pedidos_por_cep = df_delivery_filtrado['CEP'].dropna().value_counts().reset_index()
+                pedidos_por_cep.columns = ['CEP', 'num_pedidos']
+                map_data = pd.merge(left=pedidos_por_cep, right=df_ceps_database, left_on='CEP', right_on='cep', how='inner')
+                if not map_data.empty:
+                    map_data.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True, errors='ignore')
+                    st.pydeck_chart(pdk.Deck(map_style=None, initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
+                        layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=60)],
+                        tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
         else:
-            st.warning("`cep_cache.csv` não encontrado. Rode `python build_cep_cache.py` para gerar o mapa.")
-    else:
-        st.info("Nenhum pedido de delivery no período selecionado.")
+            st.info("Nenhum pedido de delivery no período selecionado.")
 
-with abas[2]:
-    st.subheader("Análise de Pedidos Cancelados")
-    if df_cancelados is not None and not df_cancelados.empty:
-        st.dataframe(df_cancelados)
-    else:
-        st.info("Nenhum pedido cancelado encontrado.")
+    with abas[2]:
+        st.subheader("Análise de Pedidos Cancelados")
+        if not df_cancelados.empty:
+            total_cancelado = df_cancelados['Total'].sum()
+            st.metric(label="Total de Pedidos Cancelados", value=len(df_cancelados))
+            st.metric(label="Prejuízo com Cancelamentos", value=format_currency(total_cancelado))
+            st.dataframe(df_cancelados)
+        else:
+            st.info("Nenhum pedido cancelado no período selecionado.")
+else:
+    st.warning("Não foi possível carregar os dados.")
