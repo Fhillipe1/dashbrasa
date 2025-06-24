@@ -148,7 +148,8 @@ if df_validos is None:
     st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
     st.stop()
 
-# --- Corpo Principal do Dashboard (O restante do código está completo) ---
+# --- Corpo Principal do Dashboard ---
+st.success("Dados carregados e processados com sucesso!")
 with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
     col_filtro1, col_filtro2 = st.columns(2)
     with col_filtro1:
