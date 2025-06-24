@@ -1,3 +1,14 @@
+import streamlit as st
+import pandas as pd
+import os
+import plotly.express as px
+import plotly.graph_objects as go
+import pydeck as pdk
+from datetime import datetime
+import unicodedata
+import pytz
+import gspread
+from gspread_dataframe import get_as_dataframe
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente. Essencial para rodar localmente.
