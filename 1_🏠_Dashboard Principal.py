@@ -11,13 +11,13 @@ import gspread
 from gspread_dataframe import get_as_dataframe
 from dotenv import load_dotenv
 
-# Carrega variáveis de ambiente. Essencial para rodar localmente.
+# Carrega variáveis de ambiente (essencial para rodar localmente)
 load_dotenv()
 
-# --- Configuração da Página (com ícone e título restaurados) ---
-st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
+# Configuração da página
+st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="🔥", layout="wide")
 
-# --- TODAS AS FUNÇÕES AUXILIARES ESTÃO AQUI ---
+# --- INÍCIO DE TODAS AS FUNÇÕES AUXILIARES ---
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -33,14 +33,13 @@ def carregar_dados_das_planilhas():
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
     try:
-        # Lógica de autenticação que funciona tanto na nuvem quanto localmente
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
         else:
             credentials_file = "google_credentials.json"
             if not os.path.exists(credentials_file):
-                st.error(f"ERRO: Arquivo de credenciais '{credentials_file}' não encontrado para execução local.")
+                st.error(f"ERRO: Arquivo de credenciais '{credentials_file}' não encontrado.")
                 return None, None
             gc = gspread.service_account(filename=credentials_file)
 
@@ -52,14 +51,12 @@ def carregar_dados_das_planilhas():
         spreadsheet = gc.open(sheet_name)
         worksheets = spreadsheet.worksheets()
         
-        # Lê a primeira aba (índice 0) para Vendas Válidas
         if len(worksheets) > 0:
             worksheet_validos = worksheets[0]
             df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
             df_validos.dropna(how='all', axis=1, inplace=True)
             print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
         
-        # Lê a segunda aba (índice 1) para Vendas Canceladas, APENAS SE ELA EXISTIR
         if len(worksheets) > 1:
             worksheet_cancelados = worksheets[1]
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
@@ -84,31 +81,58 @@ def carregar_base_ceps():
         return df
     return None
 
-def tratar_dados_lidos(df_validos, df_cancelados):
+def tratar_dados_pos_leitura(df_validos, df_cancelados):
     """Aplica as transformações de tipo de dado necessárias para os gráficos e análises."""
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
 
     df_validos = df_validos.copy()
     
-    # Garante que os tipos de dados lidos da planilha estejam corretos para manipulação
+    # Garante que as colunas de data sejam do tipo datetime
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # Cria/Recria colunas derivadas para garantir consistência
     df_validos['Data'] = pd.to_datetime(df_validos['Data da venda']).dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
     df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
 
-    # Converte colunas numéricas
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
-    
+            
+    def padronizar_texto(texto):
+        if not isinstance(texto, str): return texto
+        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
+
+    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
+    if 'Canal de venda' in df_validos.columns:
+        df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
+
     return df_validos, df_cancelados
+
+def create_gradient_line_chart(df_data):
+    """Cria um gráfico de linha com cores de gradiente."""
+    df_data['Data'] = pd.to_datetime(df_data['Data'])
+    df_data = df_data.sort_values(by='Data')
+    df_data['diff'] = df_data['Total'].diff().fillna(0)
+    fig = go.Figure()
+    color_subida = '#5D9C59'; color_descida = '#DF2E38'
+    for i in range(1, len(df_data)):
+        fig.add_trace(go.Scatter(
+            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
+            line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
+            hoverinfo='none'
+        ))
+    fig.add_trace(go.Scatter(
+        x=df_data['Data'], y=df_data['Total'], mode='markers',
+        marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
+        hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
+    ))
+    fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
+    return fig
 
 # --- Início da Interface do Streamlit ---
 col_logo, col_title = st.columns([1, 25])
@@ -118,8 +142,8 @@ with col_title:
     st.title("Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados)
+    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
+    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None or df_validos.empty:
@@ -127,7 +151,6 @@ if df_validos is None or df_validos.empty:
     st.stop()
 
 # --- Corpo Principal do Dashboard ---
-st.success("Dados carregados e processados com sucesso!")
 with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
     col_filtro1, col_filtro2 = st.columns(2)
     with col_filtro1:
@@ -154,7 +177,7 @@ with abas[0]:
     with col_kpi3: 
         if df_filtrado['Pedido'].nunique() > 0:
             st.metric(label="Ticket Médio", value=format_currency(faturamento_total / df_filtrado['Pedido'].nunique()))
-
+    
     st.divider()
     
     st.subheader("Evolução do Faturamento no Período")
@@ -178,6 +201,8 @@ with abas[1]:
                     initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
                     layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=40)],
                     tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
+            else:
+                st.warning("Nenhum CEP do relatório foi encontrado no seu cache. Rode `build_cep_cache.py` para atualizar.")
         else:
             st.warning("`cep_cache.csv` não encontrado. Rode `python build_cep_cache.py` para gerar o mapa.")
     else:
