@@ -143,8 +143,6 @@ if df_validos is not None:
     
     start_date, end_date = data_selecionada
     df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
-    
-    # Salva o dataframe filtrado na sessão para ser usado por outras páginas
     st.session_state['df_filtrado'] = df_filtrado
     
     abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
@@ -157,52 +155,11 @@ if df_validos is not None:
         with col_kpi1: st.metric(label="💰 Total em Itens", value=format_currency(total_itens))
         with col_kpi2: st.metric(label="➕ Total em Taxas", value=format_currency(total_taxas))
         with col_kpi3: st.metric(label="📈 FATURAMENTO TOTAL", value=format_currency(faturamento_total))
-        
-        st.divider()
-
-        st.subheader("Performance Semanal")
-        st.caption("O percentual (Δ) compara a média de pedidos/dia no período com a média histórica. A hora de pico e seus valores referem-se ao total no período filtrado.")
-        
-        if not df_filtrado.empty:
-            vendas_por_dia_geral = df_validos.groupby(['Data', 'Dia da Semana']).agg(Qtd_Pedidos=('Pedido', 'count')).reset_index()
-            media_historica = vendas_por_dia_geral.groupby('Dia da Semana').agg(Pedidos_Medios=('Qtd_Pedidos', 'mean'))
-            vendas_por_dia_filtrado = df_filtrado.groupby(['Data', 'Dia da Semana']).agg(Total_Vendas=('Total', 'sum'), Qtd_Pedidos=('Pedido', 'count')).reset_index()
-            media_filtrada = vendas_por_dia_filtrado.groupby('Dia da Semana').agg(Valor_Medio=('Total_Vendas', 'mean'), Pedidos_Medios=('Qtd_Pedidos', 'mean'))
-            pico_por_dia = df_filtrado.groupby(['Dia da Semana', 'Hora']).agg(Pedidos_Hora=('Pedido', 'count'), Vendas_Hora=('Total', 'sum')).reset_index()
-            idx_pico = pico_por_dia.groupby('Dia da Semana')['Pedidos_Hora'].idxmax()
-            horas_pico_info = pico_por_dia.loc[idx_pico]
-            
-            cols_dias = st.columns(7)
-            dias_ordenados = sorted(df_validos['Dia da Semana'].unique())
-
-            for i, dia_semana in enumerate(dias_ordenados):
-                with cols_dias[i]:
-                    with st.container(border=True, height=440):
-                        st.markdown(f"**{dia_semana[3:]}**")
-                        if dia_semana in media_filtrada.index:
-                            row_filtrada = media_filtrada.loc[dia_semana]
-                            row_historica = media_historica.loc[dia_semana]
-                            delta = ((row_filtrada['Pedidos_Medios'] - row_historica['Pedidos_Medios']) / row_historica['Pedidos_Medios'] * 100) if row_historica['Pedidos_Medios'] > 0 else 0
-                            st.metric(label="Média Pedidos/Dia", value=f"{row_filtrada['Pedidos_Medios']:.1f}", delta=f"{delta:.1f}%")
-                            st.markdown(f"**Vendas Médias:** {format_currency(row_filtrada['Valor_Medio'])}")
-                            st.divider()
-                            hora_pico_dia = horas_pico_info[horas_pico_info['Dia da Semana'] == dia_semana]
-                            if not hora_pico_dia.empty:
-                                hora_pico = int(hora_pico_dia['Hora'].iloc[0])
-                                pedidos_hora_pico = int(hora_pico_dia['Pedidos_Hora'].iloc[0])
-                                vendas_hora_pico = hora_pico_dia['Vendas_Hora'].iloc[0]
-                                st.markdown(f"**Pico às {hora_pico}:00**")
-                                st.caption(f"{pedidos_hora_pico} pedidos (total)")
-                                st.caption(f"{format_currency(vendas_hora_pico)} faturados")
-                        else:
-                            st.caption("Sem dados no período")
-        
         st.divider()
         st.subheader("Evolução do Faturamento Diário")
         faturamento_diario = df_filtrado.groupby(pd.to_datetime(df_filtrado['Data']))['Total'].sum().reset_index()
         if not faturamento_diario.empty and len(faturamento_diario) > 1:
-            fig_faturamento = create_gradient_line_chart(faturamento_diario)
-            st.plotly_chart(fig_faturamento, use_container_width=True)
+            st.plotly_chart(create_gradient_line_chart(faturamento_diario), use_container_width=True)
 
     # Aba 2: Delivery
     with abas[1]:
