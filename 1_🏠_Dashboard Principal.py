@@ -7,7 +7,7 @@ import pydeck as pdk
 from datetime import datetime
 import unicodedata
 import pytz
-
+from modules.utils import tratar_dados, carregar_base_ceps, create_gradient_line_chart, format_currency, carregar_dados_brutos
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
 
@@ -121,13 +121,15 @@ with col_logo:
 with col_title:
     st.title("Dashboard de Vendas La Brasa")
 
-with st.spinner("Carregando e processando dados..."):
-    df_bruto = carregar_dados_brutos()
-    df_validos, df_cancelados = tratar_dados(df_bruto)
+with st.spinner("Conectando à Planilha Google e processando dados..."):
+    # carregar_dados_brutos agora lê da Planilha Google, nossa fonte da verdade
+    df_bruto_gdrive = carregar_dados_brutos() 
+    # tratar_dados agora só ajusta os tipos para visualização
+    df_validos, df_cancelados = tratar_dados(df_bruto_gdrive)
     df_ceps_database = carregar_base_ceps()
 
-if df_bruto is None:
-    st.error("Nenhum relatório da Saipos encontrado. Execute a atualização na página 'Atualizar Relatório'.")
+if df_validos is None:
+    st.error("Não foi possível carregar os dados da Planilha Google. Tente rodar a atualização ou verifique as permissões da planilha.")
     st.stop()
 
 if df_validos is not None:
