@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 # Carrega as variáveis de ambiente (para senhas e nomes de arquivos)
 load_dotenv()
 
-# Configuração da página
-st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="🔥", layout="wide")
+# --- CORREÇÃO: ÍCONE DA PÁGINA RESTAURADO ---
+st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
 
-# --- TODAS AS FUNÇÕES AUXILIARES ESTÃO AQUI ---
+# --- Funções Auxiliares ---
 
 def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
@@ -28,17 +28,16 @@ def format_currency(value):
 
 @st.cache_data
 def carregar_dados_das_planilhas():
-    """Lê os dados das duas abas da Planilha Google."""
+    """Lê os dados das abas da Planilha Google de forma robusta."""
     print("Iniciando carregamento de dados da Planilha Google...")
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
     try:
-        # Tenta autenticar via Streamlit Secrets (para quando estiver na nuvem)
+        # Autenticação
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
         else:
-            # Se não, usa o arquivo local
             credentials_file = "google_credentials.json"
             if not os.path.exists(credentials_file):
                 st.error(f"ERRO: Arquivo de credenciais '{credentials_file}' não encontrado.")
@@ -52,18 +51,27 @@ def carregar_dados_das_planilhas():
         
         spreadsheet = gc.open(sheet_name)
         
+        # --- LÓGICA DE LEITURA ROBUSTA ---
+        worksheets = spreadsheet.worksheets()
+        
         # Lê a primeira aba (índice 0) para Vendas Válidas
-        worksheet_validos = spreadsheet.get_worksheet(0)
-        df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
-        df_validos.dropna(how='all', axis=1, inplace=True)
-        print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
+        if len(worksheets) > 0:
+            worksheet_validos = worksheets[0]
+            df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False, header=0)
+            df_validos.dropna(how='all', axis=1, inplace=True)
+            print(f"Lidas {len(df_validos)} linhas da aba '{worksheet_validos.title}'.")
         
-        # Lê a segunda aba (índice 1) para Vendas Canceladas
-        worksheet_cancelados = spreadsheet.get_worksheet(1)
-        df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
-        df_cancelados.dropna(how='all', axis=1, inplace=True)
-        print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
-        
+        # Lê a segunda aba (índice 1) para Vendas Canceladas, APENAS SE ELA EXISTIR
+        if len(worksheets) > 1:
+            worksheet_cancelados = worksheets[1]
+            df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False, header=0)
+            df_cancelados.dropna(how='all', axis=1, inplace=True)
+            print(f"Lidas {len(df_cancelados)} linhas da aba '{worksheet_cancelados.title}'.")
+        else:
+            print("Aba de cancelados não encontrada. Continuando sem dados de cancelamento.")
+            # Cria um DataFrame vazio para não quebrar o resto do código
+            df_cancelados = pd.DataFrame()
+            
         return df_validos, df_cancelados
     except Exception as e:
         st.error(f"ERRO ao carregar dados da Planilha Google: {e}")
@@ -85,16 +93,15 @@ def carregar_base_ceps():
 def tratar_dados_pos_leitura(df_validos, df_cancelados):
     """Aplica as transformações de tipo de dado necessárias para os gráficos e análises."""
     if df_validos is None or df_validos.empty:
-        return None, None
+        return None, df_cancelados
 
     df_validos = df_validos.copy()
     
-    # Garante que as colunas de data sejam do tipo datetime
+    # Garante que os tipos de dados lidos da planilha estejam corretos para manipulação
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    # Como os dados já foram tratados antes de salvar, apenas garantimos os tipos aqui
-    df_validos['Data'] = pd.to_datetime(df_validos['Data']).dt.date
+    df_validos['Data'] = pd.to_datetime(df_validos['Data da venda']).dt.date
     df_validos['Hora'] = pd.to_numeric(df_validos['Hora'])
     
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
@@ -125,20 +132,24 @@ def create_gradient_line_chart(df_data):
     fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
-# --- Início da Interface do Streamlit ---
-st.title("🔥 Dashboard de Vendas La Brasa")
+# --- Início da Interface ---
+# --- CORREÇÃO: TÍTULO COM LOGO RESTAURADO ---
+col_logo, col_title = st.columns([1, 20])
+with col_logo:
+    st.image("https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", width=50)
+with col_title:
+    st.title("Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
+    df_validos_raw, df_cancelados = carregar_dados_das_planilhas()
+    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None:
     st.error("Não foi possível carregar ou tratar os dados da Planilha Google. Verifique os logs ou execute a atualização.")
     st.stop()
 
-# --- Corpo Principal do Dashboard ---
-st.success("Dados carregados e processados com sucesso!")
+# --- Corpo Principal do Dashboard (O restante do código está completo) ---
 with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
     col_filtro1, col_filtro2 = st.columns(2)
     with col_filtro1:
@@ -189,8 +200,6 @@ with abas[1]:
                     initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
                     layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=40)],
                     tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
-            else:
-                st.warning("Nenhum CEP do relatório foi encontrado no seu cache. Rode `build_cep_cache.py` para atualizar.")
         else:
             st.warning("`cep_cache.csv` não encontrado. Rode `python build_cep_cache.py` para gerar o mapa.")
     else:
