@@ -3,45 +3,19 @@ import pandas as pd
 import os
 from datetime import datetime
 import unicodedata
-
-# Colocamos o @st.cache_data aqui para que o cache funcione em todo o app
-# Versão CORRIGIDA
-@st.cache_data
-def carregar_dados_brutos():
-    """Carrega o relatório .xlsx mais recente, tratando a coluna de data como texto."""
-    caminho_relatorios = 'relatorios_saipos'
-    if not os.path.exists(caminho_relatorios): return None
-    
-    arquivos_xlsx = [f for f in os.listdir(caminho_relatorios) if f.endswith('.xlsx')]
-    if not arquivos_xlsx: return None
-    
-    caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, 
-                                     key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
-    try:
-        # --- MUDANÇA CRÍTICA AQUI ---
-        # Forçamos a leitura da coluna 'Data da venda' como texto (string)
-        # para evitar a conversão automática de fuso horário do pandas.
-        df = pd.read_excel(
-            caminho_completo,
-            dtype={'Data da venda': str} 
-        )
-        return df
-    except Exception as e:
-        st.error(f"Erro ao ler o arquivo de relatório: {e}")
-        return None
+import pytz
 
 def tratar_dados(df):
     """Aplica todas as transformações, incluindo a correção explícita de fuso horário."""
     if df is None: return None, None
+    
+    # Padroniza nomes de colunas para segurança
+    df.columns = [str(col) for col in df.columns]
+
     if 'Pedido' in df.columns: df['Pedido'] = df['Pedido'].astype(str)
     if 'CEP' in df.columns: df['CEP'] = df['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
+    if 'Bairro' in df.columns: df['Bairro'] = df['Bairro'].astype(str).apply(padronizar_texto) # Usa a função padronizar_texto
     
-    def padronizar_texto(texto):
-        if not isinstance(texto, str): return texto
-        texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-        return texto.strip().upper()
-
-    if 'Bairro' in df.columns: df['Bairro'] = df['Bairro'].astype(str).apply(padronizar_texto)
     df_cancelados = df[df['Esta cancelado'] == 'S'].copy()
     df_validos = df[df['Esta cancelado'] == 'N'].copy()
     
@@ -80,3 +54,9 @@ def tratar_dados(df):
         lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone'
     )
     return df_validos, df_cancelados
+
+# (A função padronizar_texto deve estar neste mesmo arquivo, se ainda não estiver)
+def padronizar_texto(texto):
+    if not isinstance(texto, str): return texto
+    texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return texto.strip().upper()
