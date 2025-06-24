@@ -252,27 +252,62 @@ if df_validos is not None:
     with abas[3]:
         st.subheader("Análise de Movimento por Hora")
         col_hora1, col_hora2 = st.columns([2, 1])
+        
         with col_hora1:
             st.markdown("##### Pedidos por Hora do Dia")
-            pedidos_por_hora = df_filtrado.groupby('Hora').agg(num_pedidos=('Pedido', 'count'), ticket_medio=('Total', 'mean')).reset_index()
+            
+            # --- LÓGICA DE CÁLCULO ATUALIZADA ---
+            # 1. Agrupa os dados existentes
+            pedidos_por_hora_agrupado = df_filtrado.groupby('Hora').agg(
+                num_pedidos=('Pedido', 'count'),
+                ticket_medio=('Total', 'mean')
+            )
+            
+            # 2. Cria um índice com todas as horas do dia (0-23)
+            todas_as_horas = pd.RangeIndex(start=0, stop=24, name='Hora')
+            
+            # 3. Reindexa os dados, preenchendo as horas sem vendas com 0
+            pedidos_por_hora = pedidos_por_hora_agrupado.reindex(todas_as_horas, fill_value=0).reset_index()
+            # --- FIM DA LÓGICA ATUALIZADA ---
+        
             fig_hora = px.bar(
-                pedidos_por_hora, x='Hora', y='num_pedidos',
+                pedidos_por_hora, 
+                x='Hora', 
+                y='num_pedidos',
                 labels={'Hora': 'Hora do Dia', 'num_pedidos': 'Número de Pedidos'},
-                color='num_pedidos', color_continuous_scale=px.colors.sequential.Reds,
+                color='num_pedidos',
+                color_continuous_scale=px.colors.sequential.Reds,
                 custom_data=['ticket_medio']
             )
-            fig_hora.update_traces(hovertemplate="<b>Hora:</b> %{x}:00<br><b>Pedidos:</b> %{y}<br><b>Ticket Médio:</b> R$ %{customdata[0]:.2f}")
+            fig_hora.update_traces(
+                hovertemplate="<b>Hora:</b> %{x}:00<br><b>Pedidos:</b> %{y}<br><b>Ticket Médio:</b> R$ %{customdata[0]:.2f}"
+            )
+            # Garante que todos os ticks do eixo X sejam exibidos
+            fig_hora.update_xaxes(tickmode='linear')
             st.plotly_chart(fig_hora, use_container_width=True)
+        
         with col_hora2:
-            if not pedidos_por_hora.empty:
+            if not pedidos_por_hora.empty and pedidos_por_hora['num_pedidos'].sum() > 0:
+                # Encontra a hora com mais pedidos
                 pico_info = pedidos_por_hora.loc[pedidos_por_hora['num_pedidos'].idxmax()]
                 hora_de_pico = int(pico_info['Hora'])
-                ticket_medio_pico = pico_info['ticket_medio']
+                
+                # Recalcula o ticket médio apenas para a hora de pico real, ignorando os zeros
+                ticket_medio_pico = pico_info['ticket_medio'] if pico_info['num_pedidos'] > 0 else 0
+                
                 st.markdown("##### Destaque do Horário")
-                with st.container(border=True, height=280):
-                    st.metric(label=f"🚀 Hora de Pico no Período", value=f"{hora_de_pico}:00 - {hora_de_pico+1}:00")
-                    st.metric(label=f"Ticket Médio na Hora de Pico", value=format_currency(ticket_medio_pico))
-                    st.caption(f"A hora de pico concentrou um total de {int(pico_info['num_pedidos'])} pedidos.")                
+                with st.container(border=True, height=280): # A altura pode precisar de ajuste
+                    st.metric(
+                        label=f"🚀 Hora de Pico no Período",
+                        value=f"{hora_de_pico}:00 - {hora_de_pico+1}:00"
+                    )
+                    st.metric(
+                        label=f"Ticket Médio na Hora de Pico",
+                        value=format_currency(ticket_medio_pico)
+                    )
+                    st.caption(f"A hora de pico concentrou um total de {int(pico_info['num_pedidos'])} pedidos.")
+            else:
+                st.info("Sem dados de pedidos para analisar o movimento por hora.")               
         st.divider()
 
     # Aba 5: Delivery
