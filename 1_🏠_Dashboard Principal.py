@@ -172,7 +172,10 @@ if df_validos is not None:
     with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
         col_filtro1, col_filtro2 = st.columns(2)
         with col_filtro1:
-            data_min = df_validos['Data'].min().date(); data_max = df_validos['Data'].max().date()
+            # --- CORREÇÃO AQUI ---
+            # Removemos a chamada .date() que estava causando o erro
+            data_min = df_validos['Data'].min()
+            data_max = df_validos['Data'].max()
             data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
         with col_filtro2:
             opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
@@ -180,8 +183,13 @@ if df_validos is not None:
     
     if len(data_selecionada) != 2: st.stop()
     
-    start_date = pd.to_datetime(data_selecionada[0]); end_date = pd.to_datetime(data_selecionada[1])
-    df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
+    # Agora a comparação é feita entre objetos de data, o que é correto
+    start_date, end_date = data_selecionada
+    df_filtrado = df_validos[
+        (df_validos['Data'] >= start_date) & 
+        (df_validos['Data'] <= end_date) & 
+        (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))
+    ]
     
     # --- Organizando as seções em abas (st.tabs) ---
     abas = st.tabs([
