@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # Carrega variáveis de ambiente (essencial para rodar localmente)
 load_dotenv()
 
-# Configuração da página
+# --- Configuração da Página ---
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="🔥", layout="wide")
 
 # --- Funções Auxiliares ---
@@ -33,6 +33,7 @@ def carregar_dados_das_planilhas():
     df_validos = pd.DataFrame()
     df_cancelados = pd.DataFrame()
     try:
+        # Lógica de autenticação que funciona tanto na nuvem quanto localmente
         if "google_credentials" in st.secrets:
             creds_dict = st.secrets.get("google_credentials")
             gc = gspread.service_account_from_dict(creds_dict)
@@ -80,45 +81,47 @@ def carregar_base_ceps():
     return None
 
 def tratar_dados_pos_leitura(df_validos, df_cancelados):
-    """Aplica as transformações de tipo de dado e fuso horário necessárias."""
+    """
+    Aplica as transformações de tipo de dado e fuso horário necessárias,
+    assumindo que os dados da planilha estão em UTC.
+    """
     if df_validos is None or df_validos.empty:
         return pd.DataFrame(), pd.DataFrame() if df_cancelados is None else df_cancelados
 
     df_validos = df_validos.copy()
     
+    # --- LÓGICA DE CORREÇÃO DE FUSO HORÁRIO NA LEITURA ---
+    # 1. Converte a coluna para datetime.
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
+    # 2. Assume que a data lida da planilha é UTC e a converte para o fuso de Aracaju
     fuso_aracaju = pytz.timezone('America/Maceio')
     
+    # Se a data for "ingênua" (sem fuso), primeiro atribuímos o fuso UTC, depois convertemos.
     if df_validos['Data da venda'].dt.tz is None:
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_aracaju)
-    else:
+    else: # Se já tiver um fuso, apenas convertemos para o de Aracaju
         df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_convert(fuso_aracaju)
 
+    # 3. Agora que a data está 100% correta, criamos as outras colunas
     df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
     day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
     df_validos['Dia da Semana'] = pd.to_datetime(df_validos['Data']).dt.weekday.map(day_map)
 
+    # Garante que colunas numéricas sejam do tipo correto
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
             df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
 
-    def padronizar_texto(texto):
-        if not isinstance(texto, str): return texto
-        return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
-
-    delivery_channels_padronizados = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
-    if 'Canal de venda' in df_validos.columns:
-        df_validos['Tipo de Canal'] = df_validos['Canal de venda'].astype(str).apply(padronizar_texto).apply(lambda x: 'Delivery' if x in delivery_channels_padronizados else 'Salão/Telefone')
-
     return df_validos, df_cancelados
 
+# --- O resto do código (Interface e outras funções) permanece o mesmo ---
+# ... (código completo abaixo para garantir)
 def create_gradient_line_chart(df_data):
-    """Cria um gráfico de linha com cores de gradiente."""
     df_data['Data'] = pd.to_datetime(df_data['Data'])
     df_data = df_data.sort_values(by='Data')
     df_data['diff'] = df_data['Total'].diff().fillna(0)
@@ -142,8 +145,8 @@ def create_gradient_line_chart(df_data):
 st.title("🔥 Dashboard de Vendas La Brasa")
 
 with st.spinner("Conectando à Planilha Google e processando dados..."):
-    df_validos_raw, df_cancelados = carregar_dados_das_planilhas()
-    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados)
+    df_validos_raw, df_cancelados_raw = carregar_dados_das_planilhas()
+    df_validos, df_cancelados = tratar_dados_pos_leitura(df_validos_raw, df_cancelados_raw)
     df_ceps_database = carregar_base_ceps()
 
 if df_validos is None or df_validos.empty:
@@ -151,22 +154,32 @@ if df_validos is None or df_validos.empty:
     st.stop()
 
 # --- Corpo Principal do Dashboard ---
+st.success("Dados carregados e processados com sucesso!")
 with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
     col_filtro1, col_filtro2 = st.columns(2)
     with col_filtro1:
         data_min = df_validos['Data'].min(); data_max = df_validos['Data'].max()
         data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
     with col_filtro2:
-        opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
-        canal_selecionado = st.multiselect("Selecione o Canal de Venda", options=opcoes_canal, default=opcoes_canal)
+        # Garante que a coluna exista antes de tentar acessá-la
+        if 'Canal de venda' in df_validos.columns:
+            opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
+            canal_selecionado = st.multiselect("Selecione o Canal de Venda", options=opcoes_canal, default=opcoes_canal)
+        else:
+            canal_selecionado = []
 
 if len(data_selecionada) != 2: st.stop()
 
 start_date, end_date = data_selecionada
-df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
-st.session_state['df_filtrado'] = df_filtrado
+# Filtro base
+df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date)]
+# Filtro de canal condicional
+if 'Canal de venda' in df_filtrado.columns and canal_selecionado:
+    df_filtrado = df_filtrado[df_filtrado['Canal de venda'].fillna('Não especificado').isin(canal_selecionado)]
 
+st.session_state['df_filtrado'] = df_filtrado
 abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
+
 with abas[0]:
     st.subheader("Resumo do Período Selecionado")
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
