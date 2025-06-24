@@ -17,7 +17,9 @@ def format_currency(value):
     """Formata um número para o padrão de moeda brasileiro (R$ 1.234,56)."""
     if pd.isna(value):
         return "R$ 0,00"
-    s = f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    # Formata com vírgula como separador de milhar e ponto como decimal, depois inverte
+    s = f'{value:,.2f}'
+    s = s.replace(',', 'X').replace('.', ',').replace('X', '.')
     return f"R$ {s}"
 
 @st.cache_data
@@ -29,7 +31,7 @@ def carregar_dados_brutos():
     if not arquivos_xlsx: return None
     caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
     try:
-        return pd.read_excel(caminho_completo, dtype={'Data da venda': str})
+        return pd.read_excel(caminho_completo)
     except Exception as e:
         st.error(f"Erro ao ler o arquivo de relatório: {e}")
         return None
@@ -54,7 +56,7 @@ def padronizar_texto(texto):
     return texto.strip().upper()
 
 def tratar_dados(df):
-    """Aplica todas as transformações, incluindo a correção de fuso horário."""
+    """Aplica todas as transformações e limpezas necessárias no DataFrame."""
     if df is None: return None, None
     if 'Pedido' in df.columns: df['Pedido'] = df['Pedido'].astype(str)
     if 'CEP' in df.columns: df['CEP'] = df['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
@@ -66,12 +68,7 @@ def tratar_dados(df):
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    df_validos['Data da venda'] = df_validos['Data da venda'] - pd.Timedelta(hours=3)
-    
-    fuso_aracaju = pytz.timezone('America/Maceio')
-    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju, ambiguous='infer')
-    
-    hoje = datetime.now(fuso_aracaju)
+    hoje = datetime.now()
     df_validos = df_validos[df_validos['Data da venda'] <= hoje]
 
     df_validos['Data'] = pd.to_datetime(df_validos['Data da venda'].dt.date)
@@ -93,29 +90,62 @@ def tratar_dados(df):
 
 def create_gradient_line_chart(df_data):
     """Cria um gráfico de linha com cores de gradiente para subidas e descidas."""
-    df_data['Data'] = pd.to_datetime(df_data['Data'])
     df_data = df_data.sort_values(by='Data')
     df_data['diff'] = df_data['Total'].diff().fillna(0)
+    
     fig = go.Figure()
     color_subida = '#5D9C59'; color_descida = '#DF2E38'
+
     for i in range(1, len(df_data)):
         fig.add_trace(go.Scatter(
-            x=list(df_data['Data'])[i-1:i+1], y=list(df_data['Total'])[i-1:i+1], mode='lines',
+            x=df_data['Data'].iloc[i-1:i+1], y=df_data['Total'].iloc[i-1:i+1], mode='lines',
             line=dict(color=color_subida if df_data['diff'].iloc[i] >= 0 else color_descida, width=3),
             hoverinfo='none'
         ))
+
     fig.add_trace(go.Scatter(
         x=df_data['Data'], y=df_data['Total'], mode='markers',
         marker=dict(color='#FFFFFF', size=5, line=dict(width=1, color='DarkSlateGrey')),
         hovertemplate='<b>Data:</b> %{x|%d/%m/%Y}<br><b>Faturamento:</b> R$ %{y:,.2f}<extra></extra>'
     ))
+
     fig.update_layout(showlegend=False, height=350, yaxis_title="Faturamento (R$)", xaxis_title=None, margin=dict(l=20, r=20, t=20, b=20))
     return fig
 
+def create_gauge_chart(df_data):
+    """Cria um medidor de performance comparando a primeira e segunda metade do período."""
+    if len(df_data) < 2:
+        return None
+
+    df_data = df_data.sort_values(by='Data')
+    mid_point_index = len(df_data) // 2
+    primeira_metade_total = df_data.iloc[:mid_point_index]['Total'].sum()
+    segunda_metade_total = df_data.iloc[mid_point_index:]['Total'].sum()
+    
+    delta = ((segunda_metade_total - primeira_metade_total) / primeira_metade_total * 100) if primeira_metade_total > 0 else 0
+    
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number+delta", value = segunda_metade_total,
+        title = {'text': "Tendência no Período"},
+        delta = {'reference': primeira_metade_total, 'relative': True, 'valueformat': '.1f', 'suffix': '%'},
+        gauge = {
+            'axis': {'range': [None, primeira_metade_total * 2], 'tickwidth': 1},
+            'bar': {'color': "#5D9C59" if delta >= 0 else "#DF2E38"},
+            'steps' : [{'range': [0, primeira_metade_total * 0.9], 'color': "rgba(223, 46, 56, 0.7)"},
+                       {'range': [primeira_metade_total * 0.9, primeira_metade_total * 1.1], 'color': "rgba(255, 215, 0, 0.7)"},
+                       {'range': [primeira_metade_total * 1.1, primeira_metade_total * 2], 'color': "rgba(93, 156, 89, 0.7)"}],
+            'threshold' : {'line': {'color': "white", 'width': 4}, 'thickness': 0.9, 'value': segunda_metade_total}
+        }))
+    fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
+    return fig
+    
 # --- Início da Interface do Streamlit ---
-col_logo, col_title = st.columns([1, 20])
+col_logo, col_title = st.columns([1, 25])
 with col_logo:
-    st.image("https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", width=50)
+    st.image(
+        "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png",
+        width=50
+    )
 with col_title:
     st.title("Dashboard de Vendas La Brasa")
 
@@ -129,36 +159,46 @@ if df_bruto is None:
     st.stop()
 
 if df_validos is not None:
-    abas = st.tabs(["📊 Resumo Geral", "🛵 Delivery", "❌ Cancelamentos"])
+    st.success("Dados processados com sucesso!")
+
+    with st.expander("📅 Aplicar Filtros no Dashboard", expanded=True):
+        col_filtro1, col_filtro2 = st.columns(2)
+        with col_filtro1:
+            data_min = df_validos['Data'].min().date(); data_max = df_validos['Data'].max().date()
+            data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
+        with col_filtro2:
+            opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
+            canal_selecionado = st.multiselect("Selecione o Canal de Venda", options=opcoes_canal, default=opcoes_canal)
+    
+    if len(data_selecionada) != 2: st.stop()
+    
+    start_date = pd.to_datetime(data_selecionada[0]); end_date = pd.to_datetime(data_selecionada[1])
+    df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
+    
+    # --- Organizando as seções em abas (st.tabs) ---
+    abas = st.tabs([
+        "📊 Resumo Geral",
+        "📅 Performance Semanal",
+        "📈 Evolução do Faturamento",
+        "⏰ Movimento por Hora",
+        "🛵 Delivery",
+        "❌ Cancelamentos"
+    ])
 
     # Aba 1: Resumo Geral
     with abas[0]:
-        with st.expander("📅 Aplicar Filtros ao Dashboard", expanded=True):
-            col_filtro1, col_filtro2 = st.columns(2)
-            with col_filtro1:
-                data_min = df_validos['Data'].min(); data_max = df_validos['Data'].max()
-                data_selecionada = st.date_input("Selecione o Período", value=(data_min, data_max), min_value=data_min, max_value=data_max)
-            with col_filtro2:
-                opcoes_canal = sorted(list(df_validos['Canal de venda'].fillna('Não especificado').unique()))
-                canal_selecionado = st.multiselect("Selecione o Canal de Venda", options=opcoes_canal, default=opcoes_canal)
-        
-        if len(data_selecionada) != 2: st.stop()
-        
-        start_date, end_date = data_selecionada
-        df_filtrado = df_validos[(df_validos['Data'] >= start_date) & (df_validos['Data'] <= end_date) & (df_validos['Canal de venda'].fillna('Não especificado').isin(canal_selecionado))]
-        
         st.subheader("Resumo do Período Selecionado")
         col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
         total_itens = df_filtrado['Itens'].sum(); total_taxas = df_filtrado['Total taxa de serviço'].sum(); faturamento_total = df_filtrado['Total'].sum()
         with col_kpi1: st.metric(label="💰 Total em Itens", value=format_currency(total_itens))
         with col_kpi2: st.metric(label="➕ Total em Taxas", value=format_currency(total_taxas))
         with col_kpi3: st.metric(label="📈 FATURAMENTO TOTAL", value=format_currency(faturamento_total))
-        
         st.divider()
 
+    # Aba 2: Performance Semanal
+    with abas[1]:
         st.subheader("Performance Semanal")
-        st.caption("Cada card compara a média de pedidos/dia no período com a média histórica do mesmo dia. A hora de pico se refere ao total de pedidos e faturamento naquela hora, dentro do período filtrado.")
-        
+        st.caption("Cada card compara a performance do dia no período selecionado com sua própria média histórica.")
         if not df_filtrado.empty:
             vendas_por_dia_geral = df_validos.groupby(['Data', 'Dia da Semana']).agg(Qtd_Pedidos=('Pedido', 'count')).reset_index()
             media_historica = vendas_por_dia_geral.groupby('Dia da Semana').agg(Pedidos_Medios=('Qtd_Pedidos', 'mean'))
@@ -173,7 +213,7 @@ if df_validos is not None:
 
             for i, dia_semana in enumerate(dias_ordenados):
                 with cols_dias[i]:
-                    with st.container(border=True, height=380):
+                    with st.container(border=True, height=440):
                         st.markdown(f"**{dia_semana[3:]}**")
                         if dia_semana in media_filtrada.index:
                             row_filtrada = media_filtrada.loc[dia_semana]
@@ -188,26 +228,63 @@ if df_validos is not None:
                                 pedidos_hora_pico = int(hora_pico_dia['Pedidos_Hora'].iloc[0])
                                 vendas_hora_pico = hora_pico_dia['Vendas_Hora'].iloc[0]
                                 st.markdown(f"**Pico às {hora_pico}:00**")
-                                st.caption(f"{pedidos_hora_pico} pedidos | {format_currency(vendas_hora_pico)}")
+                                st.caption(f"{pedidos_hora_pico} pedidos (total)")
+                                st.caption(f"{format_currency(vendas_hora_pico)} faturados")
                         else:
                             st.caption("Sem dados no período")
-
         st.divider()
-        st.subheader("Evolução do Faturamento Diário")
-        faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
-        if not faturamento_diario.empty and len(faturamento_diario) > 1:
-            fig_faturamento = create_gradient_line_chart(faturamento_diario)
-            st.plotly_chart(fig_faturamento, use_container_width=True)
-    
-    # Aba 2: Delivery
-    with abas[1]:
+
+    # Aba 3: Evolução do Faturamento
+    with abas[2]:
+        st.subheader("Evolução e Tendência do Faturamento")
+        col_graf1, col_graf2 = st.columns([2, 1])
+        with col_graf1:
+            faturamento_diario = df_filtrado.groupby('Data')['Total'].sum().reset_index()
+            if not faturamento_diario.empty and len(faturamento_diario) > 1:
+                fig_faturamento = create_gradient_line_chart(faturamento_diario)
+                st.plotly_chart(fig_faturamento, use_container_width=True)
+        with col_graf2:
+            fig_gauge = create_gauge_chart(faturamento_diario)
+            if fig_gauge:
+                st.plotly_chart(fig_gauge, use_container_width=True)
+        st.divider()
+
+    # Aba 4: Movimento por Hora
+    with abas[3]:
+        st.subheader("Análise de Movimento por Hora")
+        col_hora1, col_hora2 = st.columns([2, 1])
+        with col_hora1:
+            st.markdown("##### Pedidos por Hora do Dia")
+            pedidos_por_hora = df_filtrado.groupby('Hora').agg(num_pedidos=('Pedido', 'count'), ticket_medio=('Total', 'mean')).reset_index()
+            fig_hora = px.bar(
+                pedidos_por_hora, x='Hora', y='num_pedidos',
+                labels={'Hora': 'Hora do Dia', 'num_pedidos': 'Número de Pedidos'},
+                color='num_pedidos', color_continuous_scale=px.colors.sequential.Reds,
+                custom_data=['ticket_medio']
+            )
+            fig_hora.update_traces(hovertemplate="<b>Hora:</b> %{x}:00<br><b>Pedidos:</b> %{y}<br><b>Ticket Médio:</b> R$ %{customdata[0]:.2f}")
+            st.plotly_chart(fig_hora, use_container_width=True)
+        with col_hora2:
+            if not pedidos_por_hora.empty:
+                pico_info = pedidos_por_hora.loc[pedidos_por_hora['num_pedidos'].idxmax()]
+                hora_de_pico = int(pico_info['Hora'])
+                ticket_medio_pico = pico_info['ticket_medio']
+                st.markdown("##### Destaque do Horário")
+                with st.container(border=True, height=280):
+                    st.metric(label=f"🚀 Hora de Pico no Período", value=f"{hora_de_pico}:00 - {hora_de_pico+1}:00")
+                    st.metric(label=f"Ticket Médio na Hora de Pico", value=format_currency(ticket_medio_pico))
+                    st.caption(f"A hora de pico concentrou um total de {int(pico_info['num_pedidos'])} pedidos.")                
+        st.divider()
+
+    # Aba 5: Delivery
+    with abas[4]:
         st.header("Análise de Delivery 🛵")
+        df_delivery_geral = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
         df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
-        if not df_delivery_filtrado.empty:
-            df_delivery_geral = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
-            
+        
+        if not df_delivery_filtrado.empty and not df_delivery_geral.empty:
             st.subheader("Performance de Entregas por Bairro")
-            st.caption("O percentual (Δ) compara a média de 'Pedidos por Dia' no período com a média histórica daquele bairro.")
+            st.caption("O percentual (Δ) dos cards compara a média de 'Pedidos por Dia' no período filtrado com a média histórica geral daquele bairro.")
             
             media_taxa_filtrada = df_delivery_filtrado['Entrega'].mean()
             media_taxa_geral = df_delivery_geral['Entrega'].mean()
@@ -221,8 +298,8 @@ if df_validos is not None:
             pedidos_diarios_filtrado_bairro = df_delivery_filtrado.groupby(['Bairro', 'Data'])['Pedido'].count().reset_index()
             media_filtrada_bairro = pedidos_diarios_filtrado_bairro.groupby('Bairro')['Pedido'].mean()
             
-            col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-            with col_d1:
+            col_delivery1, col_delivery2, col_delivery3, col_delivery4 = st.columns(4)
+            with col_delivery1:
                 with st.container(border=True, height=300):
                     st.markdown("##### Métricas Gerais Delivery")
                     st.markdown(f"**{numero_de_entregas}** entregas totais")
@@ -230,7 +307,7 @@ if df_validos is not None:
                     st.markdown(f"**{format_currency(ticket_medio_delivery)}** de ticket médio")
                     st.metric(label="Taxa Média por Entrega", value=format_currency(media_taxa_filtrada), delta=f"{delta_taxa:.1f}%", delta_color="inverse")
             
-            card_cols_bairro = [col_d2, col_d3, col_d4]
+            card_cols_bairro = [col_delivery2, col_delivery3, col_delivery4]
             for i, (bairro, row) in enumerate(top_bairros_filtrado.iterrows()):
                 if i < len(card_cols_bairro):
                     with card_cols_bairro[i]:
@@ -245,6 +322,7 @@ if df_validos is not None:
                             st.metric(label="Pedidos/dia (vs. média)", value=f"{media_filtrada:.1f}", delta=f"{delta_pedidos:.1f}%")
 
             st.divider()
+
             st.markdown("##### Mapa de Calor de Pedidos por CEP")
             if df_ceps_database is not None:
                 pedidos_por_cep = df_delivery_filtrado['CEP'].dropna().value_counts().reset_index()
@@ -252,21 +330,18 @@ if df_validos is not None:
                 map_data = pd.merge(left=pedidos_por_cep, right=df_ceps_database, left_on='CEP', right_on='cep', how='inner')
                 if not map_data.empty:
                     map_data.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True, errors='ignore')
-                    st.pydeck_chart(pdk.Deck(map_style=None, initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
+                    st.pydeck_chart(pdk.Deck(
+                        map_style=None, initial_view_state=pdk.ViewState(latitude=map_data['lat'].mean(), longitude=map_data['lon'].mean(), zoom=11, pitch=0),
                         layers=[pdk.Layer('HeatmapLayer', data=map_data, get_position='[lon, lat]', get_weight='num_pedidos', opacity=0.8, radius_pixels=60)],
                         tooltip={"text": "CEP: {cep}\nPedidos: {num_pedidos}"}))
+                else: st.warning("Nenhum CEP do relatório foi encontrado no seu cache. Rode `build_cep_cache.py` para atualizar.")
         else:
-            st.info("Nenhum pedido de delivery encontrado no período selecionado.")
+            st.warning("Nenhum pedido de delivery encontrado no período selecionado.")
 
-    # Aba 3: Cancelamentos
-    with abas[2]:
-        st.subheader("Análise de Pedidos Cancelados")
-        if not df_cancelados.empty:
-            total_cancelado = df_cancelados['Total'].sum()
-            st.metric(label="Total de Pedidos Cancelados", value=len(df_cancelados))
-            st.metric(label="Prejuízo com Cancelamentos", value=format_currency(total_cancelado))
-            st.dataframe(df_cancelados)
-        else:
-            st.info("Nenhum pedido cancelado no período selecionado.")
-else:
-    st.warning("Não foi possível carregar os dados.")
+    # Aba 6: Cancelamentos
+    with abas[5]:
+        st.subheader("🔍 Análise de Pedidos Cancelados")
+        total_cancelado = df_cancelados['Total'].sum()
+        st.metric(label="Total de Pedidos Cancelados", value=len(df_cancelados))
+        st.metric(label="Prejuízo com Cancelamentos", value=format_currency(total_cancelado))
+        st.dataframe(df_cancelados)
