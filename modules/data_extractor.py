@@ -165,13 +165,14 @@ def run_extraction():
         print(f"Login processado. Navegando diretamente para a página de relatórios: {REPORT_URL}")
         driver.get(REPORT_URL)
 
-        print("Aguardando página de relatório carregar (esperando pelo botão 'Buscar')...")
-        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]')))
-        print("Página de relatório carregada com sucesso.")
+        print("Aguardando página de relatório carregar (esperando por um elemento estático)...")
+        # Espera por um elemento que deve existir na página, mesmo que os botões demorem
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, 'h1')))
+        print("Página de relatório carregada. Preenchendo datas para ativar os botões...")
 
         # ETAPA 3: FILTRO E DOWNLOAD
-        campos_de_data = driver.find_elements(By.CSS_SELECTOR, "input[id='datePickerSaipos']")
-        if len(campos_de_data) < 2: raise Exception("Campos de data não encontrados.")
+        campos_de_data = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
+        if len(campos_de_data) < 2: raise Exception("Campos de data não encontrados após espera.")
         
         data_inicial_campo = campos_de_data[0]; data_final_campo = campos_de_data[1]
         data_inicial_texto = "07/05/2025"; data_final_texto = datetime.now().strftime("%d/%m/%Y")
@@ -179,11 +180,13 @@ def run_extraction():
         data_final_campo.clear(); data_final_campo.send_keys(data_final_texto); time.sleep(2)
         
         print("Clicando em 'Buscar'...")
-        driver.find_element(By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]').click(); time.sleep(5)
+        buscar_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]')))
+        buscar_button.click(); time.sleep(5)
         
         print("Clicando em 'Exportar'...")
         limpar_pasta_relatorios(DOWNLOAD_PATH)
-        driver.find_element(By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]').click()
+        exportar_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]')))
+        exportar_button.click()
         
         print("Aguardando o download..."); time.sleep(90)
     finally:
