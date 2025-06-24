@@ -5,16 +5,27 @@ from datetime import datetime
 import unicodedata
 
 # Colocamos o @st.cache_data aqui para que o cache funcione em todo o app
+# Versão CORRIGIDA
 @st.cache_data
 def carregar_dados_brutos():
-    """Carrega o relatório .xlsx mais recente da pasta 'relatorios_saipos'."""
+    """Carrega o relatório .xlsx mais recente, tratando a coluna de data como texto."""
     caminho_relatorios = 'relatorios_saipos'
     if not os.path.exists(caminho_relatorios): return None
+    
     arquivos_xlsx = [f for f in os.listdir(caminho_relatorios) if f.endswith('.xlsx')]
     if not arquivos_xlsx: return None
-    caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
+    
+    caminho_completo = os.path.join(caminho_relatorios, max(arquivos_xlsx, 
+                                     key=lambda f: os.path.getmtime(os.path.join(caminho_relatorios, f))))
     try:
-        return pd.read_excel(caminho_completo)
+        # --- MUDANÇA CRÍTICA AQUI ---
+        # Forçamos a leitura da coluna 'Data da venda' como texto (string)
+        # para evitar a conversão automática de fuso horário do pandas.
+        df = pd.read_excel(
+            caminho_completo,
+            dtype={'Data da venda': str} 
+        )
+        return df
     except Exception as e:
         st.error(f"Erro ao ler o arquivo de relatório: {e}")
         return None
