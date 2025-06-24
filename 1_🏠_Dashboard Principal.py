@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import pydeck as pdk
 from datetime import datetime
 import unicodedata
+import pytz
 from modules.utils import carregar_dados_brutos, tratar_dados
 # Configuração da página
 st.set_page_config(page_title="Dashboard de Vendas La Brasa", page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png", layout="wide")
@@ -55,7 +56,7 @@ def padronizar_texto(texto):
     return texto.strip().upper()
 
 def tratar_dados(df):
-    """Aplica todas as transformações e limpezas necessárias no DataFrame."""
+    """Aplica todas as transformações, incluindo a correção de fuso horário."""
     if df is None: return None, None
     if 'Pedido' in df.columns: df['Pedido'] = df['Pedido'].astype(str)
     if 'CEP' in df.columns: df['CEP'] = df['CEP'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(8)
@@ -64,18 +65,26 @@ def tratar_dados(df):
     df_cancelados = df[df['Esta cancelado'] == 'S'].copy()
     df_validos = df[df['Esta cancelado'] == 'N'].copy()
     
+    # --- LÓGICA DE DATA/HORA ATUALIZADA E ROBUSTA ---
+    # 1. Converte para datetime "ingênuo", como antes
     df_validos['Data da venda'] = pd.to_datetime(df_validos['Data da venda'], dayfirst=True, errors='coerce')
     df_validos.dropna(subset=['Data da venda'], inplace=True)
     
-    hoje = datetime.now()
+    # 2. Define o fuso horário correto de Aracaju
+    fuso_aracaju = pytz.timezone('America/Maceio')
+    
+    # 3. Localiza as datas "ingênuas", aplicando o fuso horário de Aracaju
+    df_validos['Data da venda'] = df_validos['Data da venda'].dt.tz_localize(fuso_aracaju)
+    
+    # 4. Pega a hora de "agora" no mesmo fuso horário para uma comparação justa
+    hoje = datetime.now(fuso_aracaju)
     df_validos = df_validos[df_validos['Data da venda'] <= hoje]
 
-    df_validos['Data'] = pd.to_datetime(df_validos['Data da venda'].dt.date)
-    
-    day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
-    df_validos['Dia da Semana'] = df_validos['Data da venda'].dt.weekday.map(day_map)
+    # 5. Extrai a data e a hora (agora corretas e com fuso)
+    df_validos['Data'] = df_validos['Data da venda'].dt.date
     df_validos['Hora'] = df_validos['Data da venda'].dt.hour
     
+    # O resto da função continua igual
     cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
     for col in cols_numericas:
         if col in df_validos.columns:
