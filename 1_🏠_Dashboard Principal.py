@@ -44,7 +44,7 @@ def carregar_dados_da_planilha():
         print(f"Lendo dados da Planilha Google: '{sheet_name}'...")
         spreadsheet = gc.open(sheet_name)
         # Lê a aba 'Vendas Validas'
-        worksheet = spreadsheet.worksheet('Vendas Validas')
+        worksheet = spreadsheet.worksheet('Relatorio_Vendas_Saipos')
         df = get_as_dataframe(worksheet, evaluate_formulas=False, header=0)
         df.dropna(how='all', axis=1, inplace=True)
         print(f"Sucesso! {len(df)} linhas lidas da planilha.")
