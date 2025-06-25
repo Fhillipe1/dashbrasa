@@ -103,6 +103,13 @@ if not df_validos.empty:
             visualization.criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total)
             st.markdown("---")
             visualization.criar_mapa_de_calor(df_delivery_filtrado, df_cache_cep)
+            st.markdown("---")
+            
+            # --- DIAGNÓSTICO ADICIONADO AQUI ---
+            st.write(f"Depuração: Encontrados {len(df_delivery_filtrado['Nome do cliente'].unique())} clientes únicos nos dados filtrados para a tabela.")
+
+            visualization.criar_tabela_top_clientes(df_delivery_filtrado)
+
 
     with tab_cancelados_aba:
         st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
