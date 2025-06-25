@@ -18,9 +18,9 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
 def criar_card(label, valor, icone):
-    """Cria um card customizado com HTML e CSS."""
+    """Cria um card de resumo customizado com HTML e CSS."""
     st.markdown(f"""
-    <div class="metric-card">
+    <div class="metric-card" style="height: 130px;">
         <div class="metric-label">
             <span class="metric-icon">{icone}</span>
             <span>{label}</span>
@@ -45,7 +45,7 @@ def criar_cards_resumo(df):
 
 
 def criar_cards_dias_semana(df):
-    """Cria 7 cards para os dias da semana com métricas específicas."""
+    """Cria 7 cards para os dias da semana, com estilo customizado e todas as métricas."""
     st.subheader(":icon[calendar-week] Análise por Dia da Semana")
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
@@ -56,24 +56,47 @@ def criar_cards_dias_semana(df):
         nome_dia_semana = dia.split('. ')[1]
         
         with cols[i]:
-            st.markdown(f"<h5 style='text-align: center; height: 35px;'>{nome_dia_semana}</h5>", unsafe_allow_html=True)
-            
             df_dia = df[df['Dia da Semana'] == dia]
 
+            # Inicia a construção do card com Markdown
+            st.markdown(f"""
+            <div class="metric-card" style="height: 250px;">
+                <div class="metric-label">{nome_dia_semana}</div>
+            """, unsafe_allow_html=True)
+
             if df_dia.empty:
-                st.info("S/D")
-                continue
+                st.markdown("<div class='metric-value' style='font-size: 1rem;'>Sem dados</div>", unsafe_allow_html=True)
+            else:
+                total_vendas_dia = df_dia['Total'].sum()
+                num_pedidos_dia = len(df_dia)
+                ticket_medio = total_vendas_dia / num_pedidos_dia if num_pedidos_dia > 0 else 0
+                
+                horario_pico = df_dia['Hora'].mode()
+                if not horario_pico.empty:
+                    horario_pico_val = int(horario_pico.iloc[0])
+                    horario_pico_str = f"{horario_pico_val}h - {horario_pico_val+1}h"
+                    df_horario_pico = df_dia[df_dia['Hora'] == horario_pico_val]
+                    valor_medio_pico = df_horario_pico['Total'].mean() if not df_horario_pico.empty else 0
+                else:
+                    horario_pico_str = "N/A"
+                    valor_medio_pico = 0
 
-            total_vendas_dia = df_dia['Total'].sum()
-            num_pedidos_dia = len(df_dia)
-            ticket_medio = total_vendas_dia / num_pedidos_dia if num_pedidos_dia > 0 else 0
+                num_dias_unicos = df_dia['Data'].nunique()
+                media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
+
+                # Exibe a métrica principal (Ticket Médio)
+                st.markdown(f"<div class='metric-value'>{formatar_moeda(ticket_medio)}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='metric-label' style='font-size: 0.8rem;'>Ticket Médio</div>", unsafe_allow_html=True)
+                
+                # Divisor e métricas secundárias
+                st.markdown("<hr class='metric-divider'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='secondary-metric'>Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='secondary-metric'>Horário Pico: <b>{horario_pico_str}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>", unsafe_allow_html=True)
             
-            num_dias_unicos = df_dia['Data'].nunique()
-            media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
+            # Fecha a div do card
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            # Usando st.metric para os cards diários para manter a simplicidade
-            st.metric(label="Tkt. Médio", value=formatar_moeda(ticket_medio))
-            st.metric(label="Pedidos/Dia", value=f"{media_pedidos_dia:.1f}")
 
 def criar_grafico_tendencia(df):
     """Cria um gráfico de linha com Plotly que mostra a tendência do faturamento diário."""
