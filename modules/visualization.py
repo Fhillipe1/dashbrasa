@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
+import numpy as np # Importa o numpy
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -110,6 +111,7 @@ def criar_grafico_tendencia(df):
 
 
 def criar_grafico_barras_horarios(df):
+    """Cria um gráfico de barras com o número de pedidos por hora, com gradiente e hover interativo."""
     st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para exibir no gráfico de performance por hora.")
@@ -121,16 +123,12 @@ def criar_grafico_barras_horarios(df):
     hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
     hourly_summary['Ticket_Medio'] = hourly_summary.apply(lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0, axis=1)
     
-    # CORREÇÃO: Prepara todos os dados customizados para o hover ANTES de criar o gráfico
-    hourly_summary['Hora_Fim'] = hourly_summary['Hora'] + 1
-    hourly_summary.loc[hourly_summary['Hora'] == 23, 'Hora_Fim'] = 0
-    custom_data = hourly_summary[['Faturamento_Total', 'Ticket_Medio', 'Hora_Fim']]
-    
-    # Truque para formatar valores monetários no hovertemplate
-    hover_text = [
-        f"<b>{int(h)}h - {int(hf)}h</b><br><b>Pedidos:</b> {int(p)}<br><b>Faturamento:</b> {formatar_moeda(f)}<br><b>Ticket Médio:</b> {formatar_moeda(t)}"
-        for h, hf, p, f, t in zip(hourly_summary['Hora'], hourly_summary['Hora_Fim'], hourly_summary['Num_Pedidos'], hourly_summary['Faturamento_Total'], hourly_summary['Ticket_Medio'])
-    ]
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Monta os dados para o hover em uma estrutura que o Plotly entende
+    custom_data = np.stack((
+        hourly_summary['Faturamento_Total'], 
+        hourly_summary['Ticket_Medio']
+    ), axis=-1)
 
     fig = go.Figure(go.Bar(
         x=hourly_summary['Hora'],
@@ -139,8 +137,15 @@ def criar_grafico_barras_horarios(df):
         textposition='outside',
         marker_color=hourly_summary['Num_Pedidos'],
         colorscale='Blues',
-        hoverinfo='text',
-        hovertext=hover_text,
+        customdata=custom_data, # Passa os dados customizados
+        # Monta o template do hover
+        hovertemplate=(
+            "<b>%{x}h</b><br><br>" +
+            "Pedidos: %{y}<br>" +
+            "Faturamento: R$ %{customdata[0]:.2f}<br>" +
+            "Ticket Médio: R$ %{customdata[1]:.2f}" +
+            "<extra></extra>" 
+        )
     ))
 
     fig.update_layout(
