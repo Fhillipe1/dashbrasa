@@ -1,4 +1,5 @@
 # 1_🏠_Dashboard_Principal.py
+
 import streamlit as st
 import pandas as pd
 from modules import data_handler, visualization
@@ -86,9 +87,11 @@ if not df_validos.empty:
         with col_graf_2:
             visualization.criar_grafico_barras_horarios(df_filtrado)
         st.markdown("---")
+        # Chamada da função de Donut Chart (inalterada)
         visualization.criar_donut_e_resumo_canais(df_filtrado)
         st.markdown("<br>", unsafe_allow_html=True)
-        visualization.criar_boxplot_e_analise_outliers(df_filtrado)
+        # Chamada da NOVA função de Distplot
+        visualization.criar_distplot_e_analise(df_filtrado)
 
     with tab_delivery:
         st.markdown("### <i class='bi bi-bicycle'></i> Análise de Entregas", unsafe_allow_html=True)
