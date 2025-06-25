@@ -44,6 +44,9 @@ def tratar_dados_saipos(df_bruto):
     
     fuso_horario = pytz.timezone('America/Maceio')
 
+    # CORREÇÃO: Aplica as transformações de data e cria as colunas para AMBOS os dataframes
+    day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
+    
     for temp_df in [df_validos, df_cancelados]:
         if not temp_df.empty and 'Data da venda' in temp_df.columns:
             temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], dayfirst=True, errors='coerce')
@@ -54,14 +57,15 @@ def tratar_dados_saipos(df_bruto):
             else:
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_convert(fuso_horario)
 
+            # Criando as colunas de data/hora para o dataframe atual (seja válido ou cancelado)
+            temp_df['Data'] = temp_df['Data da venda'].dt.date
+            temp_df['Hora'] = temp_df['Data da venda'].dt.hour
+            temp_df['Ano'] = temp_df['Data da venda'].dt.year
+            temp_df['Mês'] = temp_df['Data da venda'].dt.month
+            temp_df['Dia da Semana'] = temp_df['Data da venda'].dt.weekday.map(day_map)
+
+    # Lógicas que se aplicam apenas aos pedidos válidos
     if not df_validos.empty:
-        df_validos['Data'] = df_validos['Data da venda'].dt.date
-        df_validos['Hora'] = df_validos['Data da venda'].dt.hour
-        df_validos['Ano'] = df_validos['Data da venda'].dt.year
-        df_validos['Mês'] = df_validos['Data da venda'].dt.month
-        day_map = {0: '1. Segunda', 1: '2. Terça', 2: '3. Quarta', 3: '4. Quinta', 4: '5. Sexta', 5: '6. Sábado', 6: '7. Domingo'}
-        df_validos['Dia da Semana'] = df_validos['Data da venda'].dt.weekday.map(day_map)
-        
         cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto']
         for col in cols_numericas:
             if col in df_validos.columns:
@@ -72,6 +76,7 @@ def tratar_dados_saipos(df_bruto):
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
 
+    # Formatação final para texto antes de salvar no Google Sheets
     for temp_df in [df_validos, df_cancelados]:
         if 'Data da venda' in temp_df.columns:
             temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda']).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -84,9 +89,7 @@ def _padronizar_texto(texto):
     if not isinstance(texto, str): return texto
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn').strip().upper()
 
-
 def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
-    """Carrega os DataFrames para o Google Sheets, verificando duplicatas e adicionando apenas novas linhas."""
     gc = _get_google_sheets_client()
     if gc is None: return
     sheet_name = st.secrets.get("GOOGLE_SHEET_NAME")
@@ -100,7 +103,6 @@ def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
         st.error(f"Ocorreu um erro ao carregar os dados para o Google Sheets: {e}")
 
 def _atualizar_aba(spreadsheet, nome_aba, df_novos):
-    """Função auxiliar para atualizar uma aba específica."""
     try:
         worksheet = spreadsheet.worksheet(nome_aba)
     except gspread.WorksheetNotFound:
@@ -133,9 +135,7 @@ def _atualizar_aba(spreadsheet, nome_aba, df_novos):
         else:
             st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'.")
 
-
 def ler_dados_do_gsheets():
-    """Lê os dados das abas 'Página1' e 'Cancelados' do Google Sheets e os retorna como DataFrames."""
     gc = _get_google_sheets_client()
     if gc is None:
         st.error("Falha na conexão com o Google Sheets.")
@@ -149,16 +149,14 @@ def ler_dados_do_gsheets():
     try:
         spreadsheet = gc.open(sheet_name)
         
-        # Ler dados válidos
         try:
             worksheet_validos = spreadsheet.worksheet("Página1")
             df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False)
-            df_validos.dropna(how='all', inplace=True) # Remove linhas totalmente vazias
+            df_validos.dropna(how='all', inplace=True)
         except gspread.WorksheetNotFound:
             st.warning("Aba 'Página1' não encontrada. Retornando DataFrame vazio.")
             df_validos = pd.DataFrame()
 
-        # Ler dados cancelados
         try:
             worksheet_cancelados = spreadsheet.worksheet("Cancelados")
             df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False)
