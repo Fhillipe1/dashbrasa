@@ -93,90 +93,59 @@ def criar_cards_dias_semana(df):
 
 
 def criar_grafico_tendencia(df):
-    st.markdown("#### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
-
-    if df.empty or len(df) < 2:
+    st.markdown("##### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
+    if df.empty or len(df.groupby('Data')) < 2:
         st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
         return
 
-    daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index()
-    daily_revenue = daily_revenue.sort_values(by='Data')
-    
-    if len(daily_revenue) < 2:
-        st.info("É necessário ter pelo menos dois dias de dados para mostrar uma tendência.")
-        return
-
+    daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index().sort_values(by='Data')
     daily_revenue['diff'] = daily_revenue['Total'].diff()
     fig = go.Figure()
-
     for i in range(1, len(daily_revenue)):
         color = "#2E8B57" if daily_revenue['diff'].iloc[i] >= 0 else "#CD5C5C"
         fig.add_trace(go.Scatter(x=daily_revenue['Data'].iloc[i-1:i+1], y=daily_revenue['Total'].iloc[i-1:i+1], mode='lines', line=dict(color=color, width=3), hoverinfo='skip'))
-
     fig.add_trace(go.Scatter(x=daily_revenue['Data'], y=daily_revenue['Total'], mode='markers', marker=dict(color='#FAFAFA', size=6, line=dict(color='#333', width=1)), hoverinfo='text', text=[f"Data: {d.strftime('%d/%m/%Y')}<br>Faturamento: {formatar_moeda(v)}" for d, v in zip(daily_revenue['Data'], daily_revenue['Total'])]))
-
     fig.update_layout(template="streamlit", showlegend=False, yaxis_title="Faturamento (R$)", xaxis_title="Data", margin=dict(l=20, r=20, t=20, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
     st.plotly_chart(fig, use_container_width=True)
 
 
 def criar_grafico_barras_horarios(df):
-    """Cria um gráfico de barras com o número de pedidos por hora, com gradiente e hover interativo."""
-    st.markdown("#### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
-
+    st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para exibir no gráfico de performance por hora.")
         return
 
     # Preparação dos dados
-    hourly_summary = df.groupby('Hora').agg(
-        Num_Pedidos=('Pedido', 'count'),
-        Faturamento_Total=('Total', 'sum')
-    ).reset_index()
-
-    # Garante que todas as horas do dia (0-23) estejam presentes
+    hourly_summary = df.groupby('Hora').agg(Num_Pedidos=('Pedido', 'count'), Faturamento_Total=('Total', 'sum')).reset_index()
     horas_template = pd.DataFrame({'Hora': range(24)})
     hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
-
-    hourly_summary['Ticket_Medio'] = hourly_summary.apply(
-        lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0,
-        axis=1
-    )
+    hourly_summary['Ticket_Medio'] = hourly_summary.apply(lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0, axis=1)
     
-    # Cria o gráfico
+    # CORREÇÃO: Prepara todos os dados customizados para o hover ANTES de criar o gráfico
+    hourly_summary['Hora_Fim'] = hourly_summary['Hora'] + 1
+    hourly_summary.loc[hourly_summary['Hora'] == 23, 'Hora_Fim'] = 0
+    custom_data = hourly_summary[['Faturamento_Total', 'Ticket_Medio', 'Hora_Fim']]
+    
+    # Truque para formatar valores monetários no hovertemplate
+    hover_text = [
+        f"<b>{int(h)}h - {int(hf)}h</b><br><b>Pedidos:</b> {int(p)}<br><b>Faturamento:</b> {formatar_moeda(f)}<br><b>Ticket Médio:</b> {formatar_moeda(t)}"
+        for h, hf, p, f, t in zip(hourly_summary['Hora'], hourly_summary['Hora_Fim'], hourly_summary['Num_Pedidos'], hourly_summary['Faturamento_Total'], hourly_summary['Ticket_Medio'])
+    ]
+
     fig = go.Figure(go.Bar(
         x=hourly_summary['Hora'],
         y=hourly_summary['Num_Pedidos'],
         text=hourly_summary['Num_Pedidos'].astype(int),
         textposition='outside',
-        # Configuração do gradiente de cor
         marker_color=hourly_summary['Num_Pedidos'],
         colorscale='Blues',
-        # Informações customizadas para o hover
-        customdata=hourly_summary[['Faturamento_Total', 'Ticket_Medio']],
-        hovertemplate=(
-            "<b>%{x}h - %{customdata[2]}h</b><br>" +
-            "<b>Pedidos:</b> %{y}<br>" +
-            "<b>Faturamento:</b> %{customdata[0]:, .2f}<br>" +
-            "<b>Ticket Médio:</b> %{customdata[1]:, .2f}" +
-            "<extra></extra>" # Remove informações extras do hover
-        ).replace(",", "v").replace(".", ",").replace("v", ".") # Truque para formatação de moeda
+        hoverinfo='text',
+        hovertext=hover_text,
     ))
 
-    # Adiciona a hora final para o hovertemplate (ex: 23h - 0h)
-    fig.data[0].customdata = hourly_summary[['Faturamento_Total', 'Ticket_Medio', hourly_summary['Hora'] + 1]].values
-    fig.data[0].customdata[-1][-1] = 0 # Ajusta a última hora para 0h
-
     fig.update_layout(
-        template="streamlit",
-        xaxis_title="Hora do Dia",
-        yaxis_title="Número de Pedidos",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=350,
-        xaxis = dict(
-            tickmode = 'array',
-            tickvals = list(range(24)),
-            ticktext = [f'{h}h' for h in range(24)]
-        )
+        template="streamlit", xaxis_title="Hora do Dia", yaxis_title="Número de Pedidos",
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350,
+        xaxis=dict(tickmode='array', tickvals=list(range(24)), ticktext=[f'{h}h' for h in range(24)])
     )
     st.plotly_chart(fig, use_container_width=True)
