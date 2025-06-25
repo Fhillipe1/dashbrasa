@@ -236,3 +236,52 @@ def criar_distplot_e_analise(df):
                 st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
+
+def criar_tabela_top_clientes(df_delivery):
+    st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
+    
+    # Lista de nomes de coluna possíveis para o nome do cliente
+    nomes_possiveis_cliente = ['Nome do cliente', 'Cliente', 'Nome']
+    
+    # Encontra o nome correto da coluna no dataframe
+    nome_coluna_cliente = None
+    for nome in nomes_possiveis_cliente:
+        if nome in df_delivery.columns:
+            nome_coluna_cliente = nome
+            break
+            
+    if not nome_coluna_cliente or df_delivery[nome_coluna_cliente].isnull().all():
+        st.info("Não há dados de clientes suficientes para gerar um ranking.")
+        return
+
+    # Agrega os dados por cliente
+    df_clientes = df_delivery.groupby(nome_coluna_cliente).agg(
+        Bairro=('Bairro', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A'),
+        Telefone=('Telefone', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A'),
+        Quantidade_Pedidos=('Pedido', 'count'),
+        Valor_Total=('Total', 'sum')
+    ).reset_index()
+
+    # Ordena e cria o ranking
+    df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
+    
+    medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
+    df_clientes_sorted['Rank'] = [medalhas.get(i, f"{i+1}º") for i in df_clientes_sorted.index]
+    
+    # Renomeia a coluna do cliente para um nome padrão para o display
+    df_clientes_sorted.rename(columns={nome_coluna_cliente: 'Cliente'}, inplace=True)
+
+    # Reordena as colunas para melhor visualização
+    df_final = df_clientes_sorted[['Rank', 'Cliente', 'Bairro', 'Telefone', 'Quantidade_Pedidos', 'Valor_Total']]
+
+    st.dataframe(
+        df_final,
+        column_config={
+            "Rank": st.column_config.TextColumn("Posição", width="small"),
+            "Cliente": st.column_config.TextColumn("Nome do Cliente", width="large"),
+            "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"),
+            "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")
+        },
+        hide_index=True,
+        use_container_width=True
+    )
