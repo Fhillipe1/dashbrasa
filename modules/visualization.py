@@ -15,11 +15,12 @@ def formatar_moeda(valor):
     if valor is None: return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
-def criar_card(label, valor, icone):
+def criar_card(label, valor, icone_html):
+    """Cria um card de resumo customizado com HTML e CSS."""
     card_html = f"""
-    <div class="metric-card" style="height: 130px;">
+    <div class="metric-card" style="min-height: 130px;">
         <div class="metric-label">
-            <span class="metric-icon">{icone}</span>
+            <span class="metric-icon">{icone_html}</span>
             <span>{label}</span>
         </div>
         <div class="metric-value">{valor}</div>
@@ -28,21 +29,23 @@ def criar_card(label, valor, icone):
     st.markdown(card_html, unsafe_allow_html=True)
 
 def criar_cards_resumo(df):
+    """Cria os 3 cards principais de resumo."""
     faturamento_sem_taxas = df['Total'].sum() - df['Total taxa de serviço'].sum()
     total_taxas = df['Total taxa de serviço'].sum()
     total_geral = df['Total'].sum()
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        criar_card("Faturamento (sem taxas)", formatar_moeda(faturamento_sem_taxas), "💰")
+        criar_card("Faturamento (sem taxas)", formatar_moeda(faturamento_sem_taxas), "<i class='bi bi-cash-coin'></i>")
     with col2:
-        criar_card("Total em Taxas", formatar_moeda(total_taxas), "🧾")
+        criar_card("Total em Taxas", formatar_moeda(total_taxas), "<i class='bi bi-receipt'></i>")
     with col3:
-        criar_card("Faturamento Geral", formatar_moeda(total_geral), "📈")
+        criar_card("Faturamento Geral", formatar_moeda(total_geral), "<i class='bi bi-graph-up'></i>")
 
 
 def criar_cards_dias_semana(df):
-    st.markdown("#### :icon[calendar-week] Análise por Dia da Semana")
+    """Cria 7 cards para os dias da semana, com estilo customizado e todas as métricas."""
+    st.markdown("#### <i class='bi bi-calendar-week'></i> Análise por Dia da Semana", unsafe_allow_html=True)
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
     
@@ -53,9 +56,11 @@ def criar_cards_dias_semana(df):
             df_dia = df[df['Dia da Semana'] == dia]
             nome_dia_semana = dia.split('. ')[1]
 
+            # CORREÇÃO: Usando min-height para responsividade ao zoom
+            card_html = ""
             if df_dia.empty:
                 card_html = f"""
-                <div class="metric-card" style="height: 230px;">
+                <div class="metric-card" style="min-height: 230px;">
                     <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
                     <div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div>
                 </div>
@@ -78,9 +83,8 @@ def criar_cards_dias_semana(df):
                 num_dias_unicos = df_dia['Data'].nunique()
                 media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
                 
-                # CORREÇÃO: Usando textwrap.dedent e construindo o HTML em uma única string
                 card_html = textwrap.dedent(f"""
-                    <div class="metric-card" style="height: 230px;">
+                    <div class="metric-card" style="min-height: 230px;">
                         <p class="metric-label" style="font-size: 1.1rem;">{nome_dia_semana}</p>
                         <p class="metric-value">{formatar_moeda(ticket_medio)}</p>
                         <p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Ticket Médio</p>
@@ -95,7 +99,8 @@ def criar_cards_dias_semana(df):
 
 
 def criar_grafico_tendencia(df):
-    st.markdown("#### :icon[graph-up] Tendência do Faturamento Diário")
+    """Cria um gráfico de linha com Plotly."""
+    st.markdown("#### <i class='bi bi-graph-up-arrow'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
 
     if df.empty:
         st.info("Não há dados para o período selecionado.")
