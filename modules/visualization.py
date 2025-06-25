@@ -149,3 +149,47 @@ def criar_grafico_barras_horarios(df):
     fig = go.Figure(go.Bar(x=hourly_summary['Hora'], y=hourly_summary['Num_Pedidos'], text=hourly_summary['Num_Pedidos'].astype(int), textposition='outside', hoverinfo='text', hovertext=hover_text, marker=dict(color=hourly_summary['Num_Pedidos'], colorscale='Blues', showscale=False)))
     fig.update_layout(template="streamlit", xaxis_title="Hora do Dia", yaxis_title="Número de Pedidos", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, xaxis=dict(tickmode='array', tickvals=list(range(24)), ticktext=[f'{h}h' for h in range(24)]))
     st.plotly_chart(fig, use_container_width=True)
+
+def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
+    """Cria os cards para o Top 3 bairros com mais entregas."""
+    st.markdown("#### <i class='bi bi-geo-alt-fill'></i> Top Bairros por Nº de Entregas", unsafe_allow_html=True)
+
+    if df_delivery_filtrado.empty:
+        st.info("Sem dados de delivery para analisar os bairros.")
+        return
+
+    top_bairros = df_delivery_filtrado['Bairro'].value_counts().nlargest(3).index.tolist()
+    
+    if not top_bairros:
+        st.info("Não há informações de bairro suficientes para gerar o top 3.")
+        return
+
+    cols = st.columns(3)
+    
+    for i, bairro_nome in enumerate(top_bairros):
+        with cols[i]:
+            with st.container(border=True):
+                st.markdown(f"<h5 style='text-align: center; height: 40px;'>{i+1}º - {bairro_nome}</h5>", unsafe_allow_html=True)
+                
+                df_bairro_filtrado = df_delivery_filtrado[df_delivery_filtrado['Bairro'] == bairro_nome]
+                df_bairro_total = df_delivery_total[df_delivery_total['Bairro'] == bairro_nome]
+                
+                # Métricas do período
+                pedidos_bairro = len(df_bairro_filtrado)
+                ticket_medio_bairro = df_bairro_filtrado['Total'].mean()
+                total_taxa_entrega = df_bairro_filtrado['Entrega'].sum()
+                
+                # KPI de performance
+                dias_no_filtro = df_bairro_filtrado['Data'].nunique()
+                media_diaria_filtro = pedidos_bairro / dias_no_filtro if dias_no_filtro > 0 else 0
+                
+                dias_no_total = df_bairro_total['Data'].nunique()
+                media_diaria_total = len(df_bairro_total) / dias_no_total if dias_no_total > 0 else 0
+                
+                delta = 0
+                if media_diaria_total > 0:
+                    delta = ((media_diaria_filtro - media_diaria_total) / media_diaria_total) * 100
+                
+                st.metric("Nº de Pedidos", pedidos_bairro, f"{delta:.2f}% vs Média")
+                st.metric("Ticket Médio", formatar_moeda(ticket_medio_bairro))
+                st.metric("Total em Taxas de Entrega", formatar_moeda(total_taxa_entrega))
