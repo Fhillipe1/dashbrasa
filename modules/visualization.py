@@ -213,14 +213,25 @@ def criar_distplot_e_analise(df):
 
     col1, col2 = st.columns([1, 1])
     with col1:
-        # Prepara os dados para o distplot: uma lista contendo os valores de 'Total'
-        hist_data = [df['Total'].tolist()]
-        group_labels = ['Faturamento'] # Nome para a legenda
+        # Prepara os dados para o distplot: uma lista de arrays, um para cada dia
+        dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
+        
+        hist_data = []
+        group_labels = []
 
-        fig = ff.create_distplot(hist_data, group_labels, show_hist=True, show_rug=False, colors=['#2196F3'])
+        for dia in dias_semana_ordem:
+            dados_dia = df[df['Dia da Semana'] == dia]['Total']
+            if not dados_dia.empty:
+                hist_data.append(dados_dia.tolist())
+                group_labels.append(dia.split('. ')[1])
+        
+        if not hist_data:
+             st.info("Não há dados suficientes para gerar o gráfico de distribuição.")
+             return
+
+        fig = ff.create_distplot(hist_data, group_labels, show_hist=False, show_rug=False)
         fig.update_layout(
             template="streamlit", 
-            showlegend=False, 
             yaxis_title="Densidade", 
             xaxis_title="Valor do Pedido (R$)",
             margin=dict(l=20, r=20, t=40, b=20), 
@@ -232,7 +243,7 @@ def criar_distplot_e_analise(df):
     
     with col2:
         st.markdown("###### O que este gráfico significa?")
-        st.markdown("Este gráfico mostra a **distribuição** dos valores de todos os pedidos no período. Onde as **barras são mais altas**, significa que há uma maior concentração de pedidos com aquele valor. A **linha azul** suaviza essa distribuição, mostrando a tendência geral dos preços.")
+        st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
         Q1 = df['Total'].quantile(0.25); Q3 = df['Total'].quantile(0.75); IQR = Q3 - Q1
         limite_superior = Q3 + 1.5 * IQR
         outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
