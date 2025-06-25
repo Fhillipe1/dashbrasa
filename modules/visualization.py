@@ -6,8 +6,6 @@ import textwrap
 import altair as alt
 import os
 
-# Removidas as importações de folium e pydeck que não são mais necessárias
-
 def aplicar_css_local(caminho_arquivo):
     try:
         with open(caminho_arquivo) as f:
@@ -152,28 +150,60 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
             card_html = textwrap.dedent(f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p><p class="metric-value">{pedidos_bairro}</p><p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p>{delta_html}<hr class="metric-divider"><p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p><p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p><p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p></div>""")
             st.markdown(card_html, unsafe_allow_html=True)
 
-# --- FUNÇÃO DE MAPA REESCRITA COM st.map ---
 def criar_mapa_de_calor(df_delivery, df_cache_cep):
-    """Cria e exibe um mapa de pontos das entregas usando st.map."""
     st.markdown("#### <i class='bi bi-map-fill'></i> Concentração de Entregas", unsafe_allow_html=True)
-    
     if df_cache_cep.empty:
         st.warning("O arquivo de cache de CEPs está vazio. Atualize os relatórios para gerá-lo.")
         return
-        
     df_delivery['CEP'] = df_delivery['CEP'].astype(str)
     df_cache_cep['cep'] = df_cache_cep['cep'].astype(str)
     df_mapa = pd.merge(df_delivery, df_cache_cep, left_on='CEP', right_on='cep', how='left')
-    
     df_mapa.dropna(subset=['lat', 'lon'], inplace=True)
-    
     if df_mapa.empty:
         st.warning("Não foi possível gerar o mapa. Nenhum CEP dos pedidos foi encontrado no cache de coordenadas.")
         return
-
-    # Prepara o dataframe para o st.map, que precisa das colunas 'lat' e 'lon'
     df_mapa_final = df_mapa[['lat', 'lon']].copy()
     df_mapa_final['lat'] = pd.to_numeric(df_mapa_final['lat'])
     df_mapa_final['lon'] = pd.to_numeric(df_mapa_final['lon'])
-
     st.map(df_mapa_final, zoom=11)
+
+# --- NOVAS FUNÇÕES PARA A ABA DE CANCELADOS ---
+
+def criar_cards_cancelamento_resumo(df_cancelados, df_validos):
+    """Cria os cards de resumo para a aba de Cancelados."""
+    num_cancelados = len(df_cancelados)
+    num_validos = len(df_validos)
+    total_pedidos = num_validos + num_cancelados
+    
+    valor_perdido = pd.to_numeric(df_cancelados['Total'], errors='coerce').sum()
+    
+    taxa_cancelamento = (num_cancelados / total_pedidos) * 100 if total_pedidos > 0 else 0
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Pedidos Cancelados", num_cancelados)
+    with col2:
+        st.metric("Valor Perdido", formatar_moeda(valor_perdido))
+    with col3:
+        st.metric("Taxa de Cancelamento", f"{taxa_cancelamento:.2f}%")
+
+def criar_grafico_motivos_cancelamento(df_cancelados):
+    """Cria um gráfico de barras horizontais com os motivos de cancelamento."""
+    st.markdown("##### <i class='bi bi-question-circle'></i> Principais Motivos de Cancelamento", unsafe_allow_html=True)
+
+    if df_cancelados.empty or 'Motivo de cancelamento' not in df_cancelados.columns:
+        st.info("Não há dados de motivos de cancelamento para exibir.")
+        return
+        
+    motivos = df_cancelados['Motivo de cancelamento'].value_counts().reset_index()
+    motivos.columns = ['Motivo', 'Contagem']
+
+    chart = alt.Chart(motivos).mark_bar().encode(
+        x=alt.X('Contagem:Q', title='Número de Ocorrências'),
+        y=alt.Y('Motivo:N', title='Motivo do Cancelamento', sort='-x'),
+        tooltip=['Motivo', 'Contagem']
+    ).properties(
+        height=300
+    )
+    
+    st.altair_chart(chart, use_container_width=True)
