@@ -167,21 +167,22 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         st.warning("Não foi possível gerar o mapa. Nenhum CEP dos pedidos foi encontrado no cache de coordenadas.")
         return
 
-    df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
-    df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
-
     # --- CORREÇÃO APLICADA AQUI ---
-    # Converte a média (que é um tipo numpy) para um float padrão do Python
+    # Cria um DataFrame limpo apenas com as colunas necessárias para o mapa
+    df_map_data = df_mapa[['lat', 'lon', 'Bairro', 'CEP']].copy()
+    df_map_data['lat'] = pd.to_numeric(df_map_data['lat'])
+    df_map_data['lon'] = pd.to_numeric(df_map_data['lon'])
+
     view_state = pdk.ViewState(
-        latitude=float(df_mapa['lat'].mean()),
-        longitude=float(df_mapa['lon'].mean()),
+        latitude=float(df_map_data['lat'].mean()),
+        longitude=float(df_map_data['lon'].mean()),
         zoom=11,
         pitch=50,
     )
 
     heatmap_layer = pdk.Layer(
         'HeatmapLayer',
-        data=df_mapa,
+        data=df_map_data, # Usa o dataframe limpo
         get_position='[lon, lat]',
         opacity=0.8,
         get_weight=1,
