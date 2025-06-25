@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
-import numpy as np # Importa o numpy
+import numpy as np
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -40,7 +40,6 @@ def criar_cards_resumo(df):
         criar_card("Total em Taxas", formatar_moeda(total_taxas), "<i class='bi bi-receipt'></i>")
     with col3:
         criar_card("Faturamento Geral", formatar_moeda(total_geral), "<i class='bi bi-graph-up-arrow'></i>")
-
 
 def criar_cards_dias_semana(df):
     st.markdown("#### <i class='bi bi-calendar-week'></i> Análise por Dia da Semana", unsafe_allow_html=True)
@@ -92,7 +91,6 @@ def criar_cards_dias_semana(df):
             
             st.markdown(card_html, unsafe_allow_html=True)
 
-
 def criar_grafico_tendencia(df):
     st.markdown("##### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
     if df.empty or len(df.groupby('Data')) < 2:
@@ -109,7 +107,6 @@ def criar_grafico_tendencia(df):
     fig.update_layout(template="streamlit", showlegend=False, yaxis_title="Faturamento (R$)", xaxis_title="Data", margin=dict(l=20, r=20, t=20, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
     st.plotly_chart(fig, use_container_width=True)
 
-
 def criar_grafico_barras_horarios(df):
     """Cria um gráfico de barras com o número de pedidos por hora, com gradiente e hover interativo."""
     st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
@@ -117,40 +114,42 @@ def criar_grafico_barras_horarios(df):
         st.info("Não há dados para exibir no gráfico de performance por hora.")
         return
 
-    # Preparação dos dados
     hourly_summary = df.groupby('Hora').agg(Num_Pedidos=('Pedido', 'count'), Faturamento_Total=('Total', 'sum')).reset_index()
     horas_template = pd.DataFrame({'Hora': range(24)})
     hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
     hourly_summary['Ticket_Medio'] = hourly_summary.apply(lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0, axis=1)
     
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Monta os dados para o hover em uma estrutura que o Plotly entende
-    custom_data = np.stack((
-        hourly_summary['Faturamento_Total'], 
-        hourly_summary['Ticket_Medio']
-    ), axis=-1)
+    # --- ABORDAGEM SIMPLIFICADA E SEGURA ---
+    hover_text = []
+    for index, row in hourly_summary.iterrows():
+        hora_str = f"<b>{int(row['Hora'])}h - {int(row['Hora'])+1}h</b>"
+        pedidos_str = f"Pedidos: {int(row['Num_Pedidos'])}"
+        faturamento_str = f"Faturamento: {formatar_moeda(row['Faturamento_Total'])}"
+        ticket_str = f"Ticket Médio: {formatar_moeda(row['Ticket_Medio'])}"
+        hover_text.append(f"{hora_str}<br>{pedidos_str}<br>{faturamento_str}<br>{ticket_str}")
 
-    fig = go.Figure(go.Bar(
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
         x=hourly_summary['Hora'],
         y=hourly_summary['Num_Pedidos'],
         text=hourly_summary['Num_Pedidos'].astype(int),
         textposition='outside',
-        marker_color=hourly_summary['Num_Pedidos'],
-        colorscale='Blues',
-        customdata=custom_data, # Passa os dados customizados
-        # Monta o template do hover
-        hovertemplate=(
-            "<b>%{x}h</b><br><br>" +
-            "Pedidos: %{y}<br>" +
-            "Faturamento: R$ %{customdata[0]:.2f}<br>" +
-            "Ticket Médio: R$ %{customdata[1]:.2f}" +
-            "<extra></extra>" 
+        hoverinfo='text',
+        hovertext=hover_text,
+        marker=dict(
+            color=hourly_summary['Num_Pedidos'], # Define a cor baseada no número de pedidos
+            colorscale='Blues', # Define a escala de cores para o gradiente
+            showscale=False # Opcional: esconde a barra de escala de cor
         )
     ))
 
     fig.update_layout(
-        template="streamlit", xaxis_title="Hora do Dia", yaxis_title="Número de Pedidos",
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350,
+        template="streamlit",
+        xaxis_title="Hora do Dia",
+        yaxis_title="Número de Pedidos",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=350,
         xaxis=dict(tickmode='array', tickvals=list(range(24)), ticktext=[f'{h}h' for h in range(24)])
     )
     st.plotly_chart(fig, use_container_width=True)
