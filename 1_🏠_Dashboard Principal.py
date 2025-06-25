@@ -71,7 +71,7 @@ if not df_validos.empty:
     tab_resumo, tab_delivery, tab_cancelados = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
-        st.markdown("### :bar_chart: Visão Geral do Período Filtrado")
+        st.markdown("### <i class='bi bi-bar-chart-line-fill'></i> Visão Geral do Período Filtrado", unsafe_allow_html=True)
         
         visualization.criar_cards_resumo(df_filtrado)
         
