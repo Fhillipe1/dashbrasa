@@ -19,6 +19,7 @@ st.sidebar.title("Navegação")
 # --- CARREGAMENTO DOS DADOS ---
 @st.cache_data(ttl=300)
 def carregar_dados():
+    st.toast("Lendo dados da Planilha Google...")
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
     
     # Tratamento para df_validos
@@ -33,7 +34,7 @@ def carregar_dados():
     # Tratamento para df_cancelados
     if not df_cancelados.empty:
         if 'Data da venda' in df_cancelados.columns:
-            df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
+             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
         if 'Hora' in df_cancelados.columns:
             df_cancelados['Hora'] = pd.to_numeric(df_cancelados['Hora'], errors='coerce').fillna(0)
 
@@ -57,19 +58,36 @@ with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
 
+
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
-    with st.expander("📅 Aplicar Filtros", expanded=True):
-        col1, col2 = st.columns(2)
+    with st.expander("📅 Aplicar Filtros e Ações", expanded=True):
+        # Layout com 3 colunas para filtros e botão
+        col1, col2, col3 = st.columns([2, 2, 1]) 
+        
         with col1:
             data_min = df_validos['Data'].min()
             data_max = df_validos['Data'].max()
             data_inicial = st.date_input("Data Inicial", value=data_min, min_value=data_min, max_value=data_max)
-            data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
+        
         with col2:
-            lista_canais = df_validos['Canal de venda'].dropna().unique()
-            canais_disponiveis = sorted([str(canal) for canal in lista_canais])
-            canais_selecionados = st.multiselect("Canal de Venda", options=canais_disponiveis, default=canais_disponiveis)
+            data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
+
+        with col3:
+            # Espaçador para alinhar o botão verticalmente
+            st.write("") 
+            st.write("")
+            # Botão para atualizar os dados
+            if st.button("🔄 Atualizar Dados", use_container_width=True):
+                st.cache_data.clear()
+                st.toast("Cache limpo! Recarregando os dados da planilha...")
+                st.rerun()
+        
+        # Filtro de canais fica abaixo, ocupando a largura total
+        lista_canais = df_validos['Canal de venda'].dropna().unique()
+        canais_disponiveis = sorted([str(canal) for canal in lista_canais])
+        canais_selecionados = st.multiselect("Canal de Venda", options=canais_disponiveis, default=canais_disponiveis)
+
 
     df_filtrado = df_validos[
         (df_validos['Data'] >= data_inicial) &
@@ -121,8 +139,6 @@ if not df_validos.empty:
             st.markdown("---")
             visualization.criar_grafico_motivos_cancelamento(df_cancelados_filtrado)
             st.markdown("---")
-            
-            # Adicionando os novos gráficos
             col_cancel_1, col_cancel_2 = st.columns(2)
             with col_cancel_1:
                 visualization.criar_grafico_cancelamentos_por_hora(df_cancelados_filtrado)
