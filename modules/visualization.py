@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
-import numpy as np
+import altair as alt # Importamos a nova biblioteca
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -53,12 +53,7 @@ def criar_cards_dias_semana(df):
             nome_dia_semana = dia.split('. ')[1]
 
             if df_dia.empty:
-                card_html = f"""
-                <div class="metric-card" style="min-height: 230px;">
-                    <p class="metric-label" style="font-size: 1.1rem;">{nome_dia_semana}</p>
-                    <div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div>
-                </div>
-                """
+                card_html = f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{nome_dia_semana}</p><div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div></div>"""
             else:
                 total_vendas_dia = df_dia['Total'].sum()
                 num_pedidos_dia = len(df_dia)
@@ -107,40 +102,43 @@ def criar_grafico_tendencia(df):
     fig.update_layout(template="streamlit", showlegend=False, yaxis_title="Faturamento (R$)", xaxis_title="Data", margin=dict(l=20, r=20, t=20, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
     st.plotly_chart(fig, use_container_width=True)
 
-
+# --- NOVA FUNÇÃO COM ALTAIR ---
 def criar_grafico_barras_horarios(df):
-    """
-    Plano de contingência: Exibe os dados de performance por hora em uma tabela, 
-    já que o gráfico de barras está apresentando um erro de incompatibilidade.
-    """
+    """Cria um gráfico de barras com Altair mostrando a performance por hora."""
     st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
     if df.empty:
-        st.info("Não há dados para exibir na performance por hora.")
+        st.info("Não há dados para exibir no gráfico de performance por hora.")
         return
 
-    # Agrega os dados por hora
+    # Preparação dos dados
     hourly_summary = df.groupby('Hora').agg(
         Num_Pedidos=('Pedido', 'count'),
         Faturamento_Total=('Total', 'sum')
     ).reset_index()
-
-    # Garante que todas as horas do dia (0-23) estejam presentes
-    horas_template = pd.DataFrame({'Hora': range(24)})
-    hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
     
-    # Calcula o Ticket Médio
     hourly_summary['Ticket_Medio'] = hourly_summary.apply(
         lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0,
         axis=1
-    ).astype(float)
+    )
 
-    # Ordena pela hora
-    hourly_summary = hourly_summary.sort_values(by='Hora').reset_index(drop=True)
+    # Cria o gráfico com Altair
+    chart = alt.Chart(hourly_summary).mark_bar(
+        cornerRadiusTopLeft=3,
+        cornerRadiusTopRight=3
+    ).encode(
+        x=alt.X('Hora:O', title='Hora do Dia', axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Num_Pedidos:Q', title='Número de Pedidos'),
+        color=alt.Color('Num_Pedidos:Q', scale=alt.Scale(scheme='blues'), legend=None),
+        tooltip=[
+            alt.Tooltip('Hora:N', title='Hora do Dia'),
+            alt.Tooltip('Num_Pedidos:Q', title='Nº de Pedidos'),
+            alt.Tooltip('Faturamento_Total:Q', title='Faturamento', format='$.2f'),
+            alt.Tooltip('Ticket_Medio:Q', title='Ticket Médio', format='$.2f')
+        ]
+    ).configure_axis(
+        grid=False
+    ).configure_view(
+        strokeWidth=0
+    )
 
-    # Formata as colunas para melhor visualização na tabela
-    hourly_summary_display = hourly_summary.copy()
-    hourly_summary_display['Faturamento_Total'] = hourly_summary_display['Faturamento_Total'].apply(formatar_moeda)
-    hourly_summary_display['Ticket_Medio'] = hourly_summary_display['Ticket_Medio'].apply(formatar_moeda)
-    hourly_summary_display['Num_Pedidos'] = hourly_summary_display['Num_Pedidos'].astype(int)
-
-    st.dataframe(hourly_summary_display, use_container_width=True, hide_index=True)
+    st.altair_chart(chart, use_container_width=True)
