@@ -7,3 +7,6 @@ pytz
 openpyxl
 requests
 tqdm
+altair
+folium
+streamlit-folium
