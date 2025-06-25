@@ -146,7 +146,7 @@ def criar_grafico_barras_horarios(df):
 
 # --- NOVA FUNÇÃO PARA A ABA DELIVERY ---
 def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
-    """Cria os 4 cards de resumo para a aba de Delivery."""
+    """Cria os 4 cards de resumo para a aba de Delivery usando o estilo customizado."""
     
     # Cálculos com base no período filtrado
     qtd_entregas = len(df_delivery_filtrado)
@@ -154,23 +154,25 @@ def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
     ticket_medio_delivery = faturamento_delivery / qtd_entregas if qtd_entregas > 0 else 0
     
     # Cálculo para o KPI de performance
-    # Média diária no período filtrado
     dias_no_filtro = df_delivery_filtrado['Data'].nunique()
     media_pedidos_diaria_filtro = qtd_entregas / dias_no_filtro if dias_no_filtro > 0 else 0
     
-    # Média diária histórica
     dias_no_total = df_delivery_total['Data'].nunique()
     media_pedidos_diaria_total = len(df_delivery_total) / dias_no_total if dias_no_total > 0 else 0
     
-    # Cálculo do delta (variação percentual)
-    delta_pedidos = ((media_pedidos_diaria_filtro - media_pedidos_diaria_total) / media_pedidos_diaria_total) * 100 if media_pedidos_diaria_total > 0 else 0
+    delta_pedidos_percent = ((media_pedidos_diaria_filtro - media_pedidos_diaria_total) / media_pedidos_diaria_total) * 100 if media_pedidos_diaria_total > 0 else 0
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total de Entregas", qtd_entregas)
+        criar_card("Total de Entregas", f"{qtd_entregas}", "<i class='bi bi-truck'></i>")
     with col2:
-        st.metric("Faturamento Delivery", formatar_moeda(faturamento_delivery))
+        criar_card("Faturamento Delivery", formatar_moeda(faturamento_delivery), "<i class='bi bi-cash-stack'></i>")
     with col3:
-        st.metric("Ticket Médio Delivery", formatar_moeda(ticket_medio_delivery))
+        criar_card("Ticket Médio Delivery", formatar_moeda(ticket_medio_delivery), "<i class='bi bi-tag-fill'></i>")
     with col4:
-        st.metric("Performance Pedidos/Dia", f"{media_pedidos_diaria_filtro:.1f}", f"{delta_pedidos:.2f}% vs Média Geral")
+        criar_card(
+            label="Pedidos/Dia vs Média",
+            valor=f"{media_pedidos_diaria_filtro:.1f}",
+            icone_html="<i class='bi bi-speedometer2'></i>",
+            delta_text=f"{delta_pedidos_percent:.2f}%"
+        )
