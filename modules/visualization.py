@@ -19,7 +19,7 @@ def formatar_moeda(valor):
 
 def criar_card(label, valor, icone):
     """Cria um card de resumo customizado com HTML e CSS."""
-    st.markdown(f"""
+    card_html = f"""
     <div class="metric-card" style="height: 130px;">
         <div class="metric-label">
             <span class="metric-icon">{icone}</span>
@@ -27,7 +27,8 @@ def criar_card(label, valor, icone):
         </div>
         <div class="metric-value">{valor}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
 
 def criar_cards_resumo(df):
     """Cria os 3 cards principais de resumo."""
@@ -46,7 +47,6 @@ def criar_cards_resumo(df):
 
 def criar_cards_dias_semana(df):
     """Cria 7 cards para os dias da semana, com estilo customizado e todas as métricas."""
-    # CORREÇÃO: Usando st.markdown para garantir que o ícone renderize
     st.markdown("#### :icon[calendar-week] Análise por Dia da Semana")
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
@@ -59,12 +59,12 @@ def criar_cards_dias_semana(df):
         with cols[i]:
             df_dia = df[df['Dia da Semana'] == dia]
 
-            # CORREÇÃO: Construindo todo o card em um único bloco HTML
+            card_html = "" # Inicializa a string do card
             if df_dia.empty:
                 card_html = f"""
                 <div class="metric-card" style="height: 220px;">
-                    <div class="metric-label">{nome_dia_semana}</div>
-                    <div class='metric-value' style='font-size: 1rem; color: #555;'>Sem dados</div>
+                    <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
+                    <div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div>
                 </div>
                 """
             else:
@@ -85,6 +85,7 @@ def criar_cards_dias_semana(df):
                 num_dias_unicos = df_dia['Data'].nunique()
                 media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
 
+                # CORREÇÃO: Constrói todo o card em uma única string HTML
                 card_html = f"""
                 <div class="metric-card" style="height: 220px;">
                     <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
@@ -98,12 +99,13 @@ def criar_cards_dias_semana(df):
                     <div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>
                 </div>
                 """
+            
+            # Renderiza o card completo de uma só vez
             st.markdown(card_html, unsafe_allow_html=True)
 
 
 def criar_grafico_tendencia(df):
     """Cria um gráfico de linha com Plotly que mostra a tendência do faturamento diário."""
-    # CORREÇÃO: Usando st.markdown para garantir que o ícone renderize
     st.markdown("#### :icon[graph-up] Tendência do Faturamento Diário")
 
     if df.empty:
