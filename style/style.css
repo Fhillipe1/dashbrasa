@@ -1,16 +1,29 @@
 /* Remove o espaço extra no topo da página */
 div[data-testid="stAppViewContainer"] {
-    margin-top: -4rem;
+    margin-top: -3rem;
+}
+
+/* Estilo para o container dos filtros */
+div[data-testid="stExpander"] {
+    background-color: #1c1c1e;
+    border: 1px solid #444;
+    border-radius: 10px;
 }
 
 /* Estilo para os cards de métricas */
 div[data-testid="stMetric"] {
-    background-color: #FAFAFA;
-    border: 1px solid #E0E0E0;
+    background-color: #262730; /* Fundo cinza escuro */
+    border: 1px solid #444;
     border-radius: 10px;
-    padding: 15px;
+    padding: 20px;
     margin: 5px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    transition: box-shadow 0.3s ease-in-out; /* Adiciona transição suave */
+}
+
+/* Efeito de brilho ao passar o mouse */
+div[data-testid="stMetric"]:hover {
+    box-shadow: 0 0 15px rgba(200, 200, 200, 0.6); /* Brilho prata/branco */
 }
 
 /* Centraliza o conteúdo dos cards de dias da semana */
@@ -20,15 +33,21 @@ div[data-testid="stMetric"] > div {
     align-items: center;
 }
 
-/* Ajusta o tamanho da label e do valor nos cards */
+/* Ajusta a cor e tamanho da label (título) e do valor nos cards */
 div[data-testid="stMetric"] label {
-    font-size: 1rem !important; /* !important para garantir que sobrescreva o padrão */
+    font-size: 0.95rem !important;
     font-weight: 600;
-    color: #505050;
+    color: #FAFAFA; /* Texto branco/claro */
     text-align: center;
 }
 
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-    font-size: 1.5rem !important;
+    font-size: 1.6rem !important;
     font-weight: 700;
+    color: #FAFAFA; /* Texto branco/claro */
+}
+
+/* Força a cor do texto do streamlit a ser branca (para o título do expander de filtro) */
+.st-emotion-cache-1wmy9hl e1f1d6gn0 {
+    color: #FAFAFA;
 }
