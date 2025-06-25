@@ -16,7 +16,6 @@ def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
 def criar_card(label, valor, icone_html):
-    """Cria um card de resumo customizado com HTML e CSS."""
     card_html = f"""
     <div class="metric-card" style="min-height: 130px;">
         <div class="metric-label">
@@ -29,7 +28,6 @@ def criar_card(label, valor, icone_html):
     st.markdown(card_html, unsafe_allow_html=True)
 
 def criar_cards_resumo(df):
-    """Cria os 3 cards principais de resumo."""
     faturamento_sem_taxas = df['Total'].sum() - df['Total taxa de serviço'].sum()
     total_taxas = df['Total taxa de serviço'].sum()
     total_geral = df['Total'].sum()
@@ -40,28 +38,24 @@ def criar_cards_resumo(df):
     with col2:
         criar_card("Total em Taxas", formatar_moeda(total_taxas), "<i class='bi bi-receipt'></i>")
     with col3:
-        criar_card("Faturamento Geral", formatar_moeda(total_geral), "<i class='bi bi-graph-up'></i>")
+        criar_card("Faturamento Geral", formatar_moeda(total_geral), "<i class='bi bi-graph-up-arrow'></i>")
 
 
 def criar_cards_dias_semana(df):
-    """Cria 7 cards para os dias da semana, com estilo customizado e todas as métricas."""
     st.markdown("#### <i class='bi bi-calendar-week'></i> Análise por Dia da Semana", unsafe_allow_html=True)
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
     
     cols = st.columns(7)
-
     for i, dia in enumerate(dias_semana):
         with cols[i]:
             df_dia = df[df['Dia da Semana'] == dia]
             nome_dia_semana = dia.split('. ')[1]
 
-            # CORREÇÃO: Usando min-height para responsividade ao zoom
-            card_html = ""
             if df_dia.empty:
                 card_html = f"""
                 <div class="metric-card" style="min-height: 230px;">
-                    <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
+                    <p class="metric-label" style="font-size: 1.1rem;">{nome_dia_semana}</p>
                     <div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div>
                 </div>
                 """
@@ -99,11 +93,10 @@ def criar_cards_dias_semana(df):
 
 
 def criar_grafico_tendencia(df):
-    """Cria um gráfico de linha com Plotly."""
-    st.markdown("#### <i class='bi bi-graph-up-arrow'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
+    st.markdown("#### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
 
-    if df.empty:
-        st.info("Não há dados para o período selecionado.")
+    if df.empty or len(df) < 2:
+        st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
         return
 
     daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index()
@@ -114,7 +107,6 @@ def criar_grafico_tendencia(df):
         return
 
     daily_revenue['diff'] = daily_revenue['Total'].diff()
-
     fig = go.Figure()
 
     for i in range(1, len(daily_revenue)):
@@ -124,5 +116,67 @@ def criar_grafico_tendencia(df):
     fig.add_trace(go.Scatter(x=daily_revenue['Data'], y=daily_revenue['Total'], mode='markers', marker=dict(color='#FAFAFA', size=6, line=dict(color='#333', width=1)), hoverinfo='text', text=[f"Data: {d.strftime('%d/%m/%Y')}<br>Faturamento: {formatar_moeda(v)}" for d, v in zip(daily_revenue['Data'], daily_revenue['Total'])]))
 
     fig.update_layout(template="streamlit", showlegend=False, yaxis_title="Faturamento (R$)", xaxis_title="Data", margin=dict(l=20, r=20, t=20, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def criar_grafico_barras_horarios(df):
+    """Cria um gráfico de barras com o número de pedidos por hora, com gradiente e hover interativo."""
+    st.markdown("#### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
+
+    if df.empty:
+        st.info("Não há dados para exibir no gráfico de performance por hora.")
+        return
+
+    # Preparação dos dados
+    hourly_summary = df.groupby('Hora').agg(
+        Num_Pedidos=('Pedido', 'count'),
+        Faturamento_Total=('Total', 'sum')
+    ).reset_index()
+
+    # Garante que todas as horas do dia (0-23) estejam presentes
+    horas_template = pd.DataFrame({'Hora': range(24)})
+    hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
+
+    hourly_summary['Ticket_Medio'] = hourly_summary.apply(
+        lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0,
+        axis=1
+    )
     
+    # Cria o gráfico
+    fig = go.Figure(go.Bar(
+        x=hourly_summary['Hora'],
+        y=hourly_summary['Num_Pedidos'],
+        text=hourly_summary['Num_Pedidos'].astype(int),
+        textposition='outside',
+        # Configuração do gradiente de cor
+        marker_color=hourly_summary['Num_Pedidos'],
+        colorscale='Blues',
+        # Informações customizadas para o hover
+        customdata=hourly_summary[['Faturamento_Total', 'Ticket_Medio']],
+        hovertemplate=(
+            "<b>%{x}h - %{customdata[2]}h</b><br>" +
+            "<b>Pedidos:</b> %{y}<br>" +
+            "<b>Faturamento:</b> %{customdata[0]:, .2f}<br>" +
+            "<b>Ticket Médio:</b> %{customdata[1]:, .2f}" +
+            "<extra></extra>" # Remove informações extras do hover
+        ).replace(",", "v").replace(".", ",").replace("v", ".") # Truque para formatação de moeda
+    ))
+
+    # Adiciona a hora final para o hovertemplate (ex: 23h - 0h)
+    fig.data[0].customdata = hourly_summary[['Faturamento_Total', 'Ticket_Medio', hourly_summary['Hora'] + 1]].values
+    fig.data[0].customdata[-1][-1] = 0 # Ajusta a última hora para 0h
+
+    fig.update_layout(
+        template="streamlit",
+        xaxis_title="Hora do Dia",
+        yaxis_title="Número de Pedidos",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=350,
+        xaxis = dict(
+            tickmode = 'array',
+            tickvals = list(range(24)),
+            ticktext = [f'{h}h' for h in range(24)]
+        )
+    )
     st.plotly_chart(fig, use_container_width=True)
