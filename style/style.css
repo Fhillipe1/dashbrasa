@@ -1,7 +1,4 @@
-/* Remove o espaço extra no topo da página */
-div[data-testid="stAppViewContainer"] {
-    margin-top: -3rem;
-}
+/* REMOVIDA a regra problemática que escondia a sidebar */
 
 /* Estilo para o container dos filtros */
 div[data-testid="stExpander"] {
@@ -14,7 +11,7 @@ div[data-testid="stExpander"] summary {
     color: #FAFAFA;
 }
 
-/* --- NOVO: Estilo para os campos dentro do filtro --- */
+/* Estilo para os campos dentro do filtro */
 div[data-testid="stExpander"] div[data-testid="stDateInput"],
 div[data-testid="stExpander"] div[data-testid="stMultiSelect"] {
     background-color: white;
@@ -40,16 +37,19 @@ div[data-testid="stMetric"] {
     transition: box-shadow 0.3s ease-in-out;
 }
 
+/* Efeito de brilho ao passar o mouse */
 div[data-testid="stMetric"]:hover {
     box-shadow: 0 0 15px rgba(200, 200, 200, 0.6);
 }
 
+/* Centraliza o conteúdo dos cards */
 div[data-testid="stMetric"] > div {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
+/* Ajusta a cor e tamanho da label (título) e do valor nos cards */
 div[data-testid="stMetric"] label {
     font-size: 0.85rem !important;
     font-weight: 600;
