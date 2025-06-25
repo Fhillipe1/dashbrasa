@@ -170,11 +170,12 @@ def criar_donut_cancelamentos_por_canal(df_cancelados):
     chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(theta=alt.Theta(field="Contagem", type="quantitative"), color=alt.Color(field="Canal", type="nominal", title="Canal"), tooltip=['Canal', 'Contagem']).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
     
-# --- FUNÇÕES FINAIS E CORRIGIDAS ---
+# --- FUNÇÃO ATUALIZADA E CORRIGIDA ---
 def criar_donut_e_resumo_canais(df):
     st.markdown("#### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para exibir na análise de canais."); return
+        
     col1, col2 = st.columns([1, 1])
     with col1:
         df_canal = df.groupby('Canal de venda').agg(Faturamento=('Total', 'sum'), Pedidos=('Pedido', 'count')).reset_index()
@@ -191,15 +192,29 @@ def criar_donut_e_resumo_canais(df):
         st.markdown("###### Insights sobre os Canais")
         ticket_medio_geral = df['Total'].sum() / len(df) if len(df) > 0 else 0
         df_canal_sorted = df_canal.sort_values(by="Faturamento", ascending=False)
+        
+        # CORREÇÃO FINAL: Usando st.write e st.badge para evitar erros de formatação
         for index, row in df_canal_sorted.iterrows():
             canal = row['Canal de venda']
             tm_canal = row['Ticket Medio']
-            # CORREÇÃO FINAL: Usando st.write e quebrando a linha em partes simples
-            st.write(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**, que está ", end="")
-            if tm_canal > ticket_medio_geral:
-                st.markdown(f"<span style='color:green;'>acima</span> da média geral ({formatar_moeda(ticket_medio_geral)}).", unsafe_allow_html=True)
+            
+            # Define o status do ticket médio em relação à média geral
+            if tm_canal > ticket_medio_geral * 1.02: # Acima da média (com margem de 2%)
+                status_cor = "green"
+                status_texto = "Acima da média"
+            elif tm_canal < ticket_medio_geral * 0.98: # Abaixo da média (com margem de 2%)
+                status_cor = "red"
+                status_texto = "Abaixo da média"
             else:
-                st.markdown(f"<span style='color:red;'>abaixo</span> da média geral ({formatar_moeda(ticket_medio_geral)}).", unsafe_allow_html=True)
+                status_cor = "orange"
+                status_texto = "Na média"
+            
+            # Usa colunas para alinhar o texto e o badge
+            insight_cols = st.columns([4, 2])
+            with insight_cols[0]:
+                st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**")
+            with insight_cols[1]:
+                st.badge(status_texto, color=status_cor)
 
 def criar_boxplot_e_analise_outliers(df):
     st.markdown("#### <i class='bi bi-box-seam'></i> Análise de Dispersão de Valores", unsafe_allow_html=True)
@@ -207,9 +222,9 @@ def criar_boxplot_e_analise_outliers(df):
         st.info("Não há dados para a análise de dispersão."); return
     col1, col2 = st.columns([1, 1])
     with col1:
-        # CORREÇÃO FINAL: Removido o parâmetro 'outliers' pois ele é o padrão. Removido 'extent'
-        chart = alt.Chart(df).mark_boxplot().encode(
-            y=alt.Y('Total:Q', title='Valor do Pedido (R$)'),
+        # CORREÇÃO: Removendo 'extent' para que os outliers sejam mostrados
+        chart = alt.Chart(df).mark_boxplot(outliers=True).encode(
+            y=alt.Y('Total:Q', title='Valor do Pedido (R$)', scale=alt.Scale(zero=False)),
             tooltip=[alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'), alt.Tooltip('Total:Q', title='Valor do Pedido', format='R$,.2f')]
         ).properties(height=350, title="Distribuição Geral dos Valores de Pedido")
         st.altair_chart(chart, use_container_width=True)
