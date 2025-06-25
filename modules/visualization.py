@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import textwrap # <-- Importamos a biblioteca para limpar a formatação do texto
 
 def aplicar_css_local(caminho_arquivo):
     """Aplica um arquivo CSS local ao app Streamlit."""
@@ -59,7 +60,6 @@ def criar_cards_dias_semana(df):
         with cols[i]:
             df_dia = df[df['Dia da Semana'] == dia]
 
-            card_html = "" # Inicializa a string do card
             if df_dia.empty:
                 card_html = f"""
                 <div class="metric-card" style="height: 220px;">
@@ -85,22 +85,22 @@ def criar_cards_dias_semana(df):
                 num_dias_unicos = df_dia['Data'].nunique()
                 media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
 
-                # CORREÇÃO: Constrói todo o card em uma única string HTML
-                card_html = f"""
-                <div class="metric-card" style="height: 220px;">
-                    <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
-                    <div class='metric-value' style="margin-top: 5px;">{formatar_moeda(ticket_medio)}</div>
-                    <div class='metric-label' style='font-size: 0.8rem; margin-bottom: 8px;'>Ticket Médio</div>
-                    
-                    <hr class='metric-divider'>
-                    
-                    <div class='secondary-metric'>Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></div>
-                    <div class='secondary-metric'>Horário Pico: <b>{horario_pico_str}</b></div>
-                    <div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>
-                </div>
-                """
+                # --- CORREÇÃO APLICADA AQUI ---
+                # Usamos textwrap.dedent para remover a indentação do código
+                card_html = textwrap.dedent(f"""
+                    <div class="metric-card" style="height: 220px;">
+                        <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
+                        <div class='metric-value' style="margin-top: 5px;">{formatar_moeda(ticket_medio)}</div>
+                        <div class='metric-label' style='font-size: 0.8rem; margin-bottom: 8px;'>Ticket Médio</div>
+                        
+                        <hr class='metric-divider'>
+                        
+                        <div class='secondary-metric'>Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></div>
+                        <div class='secondary-metric'>Horário Pico: <b>{horario_pico_str}</b></div>
+                        <div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>
+                    </div>
+                """)
             
-            # Renderiza o card completo de uma só vez
             st.markdown(card_html, unsafe_allow_html=True)
 
 
