@@ -48,8 +48,12 @@ if not df_validos.empty:
         (df_validos['Canal de venda'].isin(canais_selecionados))
     ]
 
-    # --- CARDS DE RESUMO GERAL ---
-    st.markdown("---")
+    # --- INÍCIO DO CONTEÚDO DO DASHBOARD ---
+
+    # Aba de Resumo Geral
+    st.markdown("### Resumo Geral do Período")
+    
+    # Cards de Resumo Geral
     faturamento_sem_taxas = df_filtrado['Total'].sum() - df_filtrado['Total taxa de serviço'].sum()
     total_taxas = df_filtrado['Total taxa de serviço'].sum()
     total_geral = df_filtrado['Total'].sum()
@@ -62,16 +66,21 @@ if not df_validos.empty:
     with col3:
         st.metric(label="Faturamento Geral", value=visualization.formatar_moeda(total_geral))
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- CHAMADA PARA OS CARDS DIÁRIOS ---
+    # Cards Diários
     visualization.criar_cards_dias_semana(df_filtrado)
 
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # A tabela de verificação pode ser mantida ou removida no futuro
+    # Gráfico de Tendência
+    visualization.criar_grafico_tendencia(df_filtrado)
+
+
+    # A tabela de verificação pode ser mantida para depuração ou removida
     st.markdown("---")
-    st.subheader("Dados Filtrados (Apenas para verificação)")
-    st.dataframe(df_filtrado)
+    with st.expander("Ver dados filtrados"):
+        st.dataframe(df_filtrado)
 
 else:
     st.warning("Não há dados válidos para exibir. Por favor, atualize o relatório na página 'Atualizar Relatório'.")
