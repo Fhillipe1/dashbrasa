@@ -5,15 +5,22 @@ import pandas as pd
 from modules import data_handler, visualization
 from datetime import datetime
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- CONFIGURAÇÃO DA PÁGINA E CSS ---
+LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png"
 st.set_page_config(
     layout="wide", 
     page_title="Dashboard de Vendas La Brasa",
-    page_icon="https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png"
+    page_icon=LOGO_URL
 )
-
-# Aplica o CSS customizado
 visualization.aplicar_css_local("style/style.css")
+
+
+# --- BARRA LATERAL (SIDEBAR) ---
+st.sidebar.image(LOGO_URL, width=200)
+st.sidebar.title("Navegação")
+st.sidebar.markdown("Selecione uma página abaixo:")
+# O Streamlit cria os links para as outras páginas automaticamente aqui.
+
 
 # --- CARREGAMENTO DOS DADOS ---
 @st.cache_data(ttl=300)
@@ -28,17 +35,19 @@ def carregar_dados():
         
         if 'Data' in df_validos.columns:
             df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
-
-    # Repetir o processo para df_cancelados se necessário no futuro
-    # ...
-
     return df_validos, df_cancelados
 
 df_validos, df_cancelados = carregar_dados()
 
-# --- TÍTULO PRINCIPAL ---
-st.title("🔥 Dashboard de Vendas La Brasa")
+
+# --- CABEÇALHO COM LOGO E TÍTULO ---
+col_logo, col_titulo = st.columns([1, 4])
+with col_logo:
+    st.image(LOGO_URL, width=150)
+with col_titulo:
+    st.title("Dashboard de Vendas")
 st.markdown("---")
+
 
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
@@ -51,10 +60,9 @@ if not df_validos.empty:
             data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
         
         with col2:
-            canais_disponiveis = df_validos['Canal de venda'].unique()
+            canais_disponiveis = sorted(df_validos['Canal de venda'].unique())
             canais_selecionados = st.multiselect("Canal de Venda", options=canais_disponiveis, default=canais_disponiveis)
 
-    # Aplicação dos filtros no DataFrame
     df_filtrado = df_validos[
         (df_validos['Data'] >= data_inicial) &
         (df_validos['Data'] <= data_final) &
@@ -65,8 +73,6 @@ if not df_validos.empty:
     tab_resumo, tab_delivery, tab_cancelados = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
-        st.header("Visão Geral do Período Filtrado")
-        
         # Cards de Resumo Geral
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -100,6 +106,5 @@ if not df_validos.empty:
             st.dataframe(df_cancelados)
         else:
             st.write("Nenhum pedido cancelado no período.")
-
 else:
     st.error("Não foi possível carregar os dados. Verifique a página 'Atualizar Relatório' ou a sua Planilha Google.")
