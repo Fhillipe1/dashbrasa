@@ -21,7 +21,6 @@ def _get_google_sheets_client():
 # --- FUNÇÕES DE DADOS ---
 
 def tratar_dados_saipos(df_bruto):
-    # (Esta função permanece inalterada)
     if df_bruto is None or df_bruto.empty:
         return pd.DataFrame(), pd.DataFrame()
     df = df_bruto.copy()
@@ -61,8 +60,8 @@ def tratar_dados_saipos(df_bruto):
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
     for temp_df in [df_validos, df_cancelados]:
-        if 'Data da venda' in temp_df.columns:
-            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        for col in temp_df.select_dtypes(include=['datetime64[ns, America/Maceio]']).columns:
+            temp_df[col] = temp_df[col].astype(str)
         if 'Data' in temp_df.columns:
             temp_df['Data'] = temp_df['Data'].astype(str)
     return df_validos, df_cancelados
@@ -106,40 +105,26 @@ def _atualizar_aba_robusta(spreadsheet, nome_aba, df_novos):
     set_with_dataframe(worksheet, df_final, include_index=False, resize=True)
     st.success(f"Aba '{nome_aba}' atualizada com sucesso!")
 
-# --- FUNÇÃO ATUALIZADA ---
 def ler_dados_do_gsheets():
-    """Lê os dados do Google Sheets. Retorna dataframes vazios em caso de erro."""
     try:
         gc = _get_google_sheets_client()
-        if gc is None:
-            print("Falha na conexão com o Google Sheets.")
-            return pd.DataFrame(), pd.DataFrame()
-
+        if gc is None: print("Falha na conexão com o Google Sheets."); return pd.DataFrame(), pd.DataFrame()
         sheet_name = st.secrets.get("GOOGLE_SHEET_NAME")
-        if not sheet_name:
-            print("Nome da planilha não configurado nos segredos.")
-            return pd.DataFrame(), pd.DataFrame()
-            
+        if not sheet_name: print("Nome da planilha não configurado nos segredos."); return pd.DataFrame(), pd.DataFrame()
         spreadsheet = gc.open(sheet_name)
-        
-        # Ler dados válidos
-        try:
-            worksheet_validos = spreadsheet.worksheet("Página1")
-            df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False).dropna(how='all')
-        except gspread.WorksheetNotFound:
-            print("Aba 'Página1' não encontrada.")
-            df_validos = pd.DataFrame()
-
-        # Ler dados cancelados
-        try:
-            worksheet_cancelados = spreadsheet.worksheet("Cancelados")
-            df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False).dropna(how='all')
-        except gspread.WorksheetNotFound:
-            print("Aba 'Cancelados' não encontrada.")
-            df_cancelados = pd.DataFrame()
-            
+        df_validos = get_as_dataframe(spreadsheet.worksheet("Página1"), evaluate_formulas=False).dropna(how='all')
+        df_cancelados = get_as_dataframe(spreadsheet.worksheet("Cancelados"), evaluate_formulas=False).dropna(how='all')
         return df_validos, df_cancelados
-
     except Exception as e:
         print(f"Ocorreu um erro ao ler os dados do Google Sheets: {e}")
         return pd.DataFrame(), pd.DataFrame()
+
+# --- FUNÇÃO DETETIVE ATUALIZADA ---
+def encontrar_nome_coluna_cliente(df):
+    """Encontra o nome correto da coluna de cliente a partir de uma lista de possibilidades."""
+    # Adicionando 'Consumidor' à lista
+    nomes_possiveis = ['Consumidor', 'Nome do cliente', 'Cliente', 'Nome']
+    for nome in nomes_possiveis:
+        if nome in df.columns:
+            return nome
+    return None
