@@ -96,7 +96,7 @@ def criar_cards_dias_semana(df):
 def criar_grafico_tendencia(df):
     st.markdown("##### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
     if df.empty or len(df.groupby('Data')) < 2:
-        st.info("É necessário ter pelo menos dois dias de dados para mostrar uma tendência.")
+        st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
         return
     daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index().sort_values(by='Data')
     daily_revenue['diff'] = daily_revenue['Total'].diff()
@@ -151,16 +151,23 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
             st.markdown(card_html, unsafe_allow_html=True)
 
 def criar_mapa_de_calor(df_delivery, df_cache_cep):
-    """Cria e exibe um mapa de calor das entregas usando Pydeck."""
     st.markdown("#### <i class='bi bi-map-fill'></i> Mapa de Calor das Entregas", unsafe_allow_html=True)
     
-    # CORREÇÃO: Especificar as colunas de junção explicitamente
+    if df_cache_cep.empty:
+        st.warning("O arquivo de cache de CEPs está vazio. Atualize os relatórios para gerá-lo.")
+        return
+        
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Força a conversão de ambas as chaves para string ANTES do merge para garantir compatibilidade
+    df_delivery['CEP'] = df_delivery['CEP'].astype(str)
+    df_cache_cep['cep'] = df_cache_cep['cep'].astype(str)
+    
     df_mapa = pd.merge(df_delivery, df_cache_cep, left_on='CEP', right_on='cep', how='left')
     
     df_mapa.dropna(subset=['lat', 'lon'], inplace=True)
     
     if df_mapa.empty:
-        st.warning("Não foi possível gerar o mapa. Verifique se os CEPs dos pedidos existem no cache de coordenadas.")
+        st.warning("Não foi possível gerar o mapa. Nenhum CEP dos pedidos foi encontrado no cache de coordenadas.")
         return
 
     df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
@@ -177,7 +184,7 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         'HeatmapLayer',
         data=df_mapa,
         get_position='[lon, lat]',
-        opacity=0.9,
+        opacity=0.8,
         get_weight=1,
         threshold=0.05,
         radius_pixels=40
