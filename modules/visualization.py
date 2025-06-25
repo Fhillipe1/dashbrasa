@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import textwrap
 import altair as alt
-import pydeck as pdk # Importa a biblioteca para o mapa
+import pydeck as pdk
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -96,7 +96,7 @@ def criar_cards_dias_semana(df):
 def criar_grafico_tendencia(df):
     st.markdown("##### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
     if df.empty or len(df.groupby('Data')) < 2:
-        st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
+        st.info("É necessário ter pelo menos dois dias de dados para mostrar uma tendência.")
         return
     daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index().sort_values(by='Data')
     daily_revenue['diff'] = daily_revenue['Total'].diff()
@@ -144,29 +144,28 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
             media_diaria_total = len(df_bairro_total) / dias_no_total if dias_no_total > 0 else 0
             delta_percent = ((media_diaria_filtro - media_diaria_total) / media_diaria_total) * 100 if media_diaria_total > 0 else 0
             delta_str = f"{delta_percent:+.2f}%"
-            card_html = textwrap.dedent(f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p><p class="metric-value">{pedidos_bairro}</p><p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p><div class='metric-delta {'metric-delta-positive' if delta_percent >= 0 else 'metric-delta-negative'}'>{'▲' if delta_percent >= 0 else '▼'} {delta_str.replace('-', '')} vs Média</div><hr class="metric-divider"><p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p><p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p><p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p></div>""")
+            seta = "▲" if delta_percent >= 0 else "▼"
+            delta_class = "metric-delta-positive" if delta_percent >= 0 else "metric-delta-negative"
+            delta_html = f"<div class='{delta_class}'>{seta} {delta_str.replace('-', '').replace('+', '')} vs Média</div>"
+            card_html = textwrap.dedent(f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p><p class="metric-value">{pedidos_bairro}</p><p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p>{delta_html}<hr class="metric-divider"><p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p><p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p><p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p></div>""")
             st.markdown(card_html, unsafe_allow_html=True)
 
-# --- NOVA FUNÇÃO PARA O MAPA DE CALOR ---
 def criar_mapa_de_calor(df_delivery, df_cache_cep):
     """Cria e exibe um mapa de calor das entregas usando Pydeck."""
     st.markdown("#### <i class='bi bi-map-fill'></i> Mapa de Calor das Entregas", unsafe_allow_html=True)
-
-    # Junta os dados de entrega com as coordenadas do cache
-    df_mapa = pd.merge(df_delivery, df_cache_cep, on='CEP', how='left')
     
-    # Remove pedidos que não tiveram o CEP encontrado no cache
+    # CORREÇÃO: Especificar as colunas de junção explicitamente
+    df_mapa = pd.merge(df_delivery, df_cache_cep, left_on='CEP', right_on='cep', how='left')
+    
     df_mapa.dropna(subset=['lat', 'lon'], inplace=True)
     
     if df_mapa.empty:
         st.warning("Não foi possível gerar o mapa. Verifique se os CEPs dos pedidos existem no cache de coordenadas.")
         return
 
-    # Converte lat/lon para numérico
     df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
     df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
 
-    # Define a visualização inicial do mapa (centralizado na média das coordenadas)
     view_state = pdk.ViewState(
         latitude=df_mapa['lat'].mean(),
         longitude=df_mapa['lon'].mean(),
@@ -174,21 +173,19 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         pitch=50,
     )
 
-    # Define a camada de mapa de calor
     heatmap_layer = pdk.Layer(
         'HeatmapLayer',
         data=df_mapa,
         get_position='[lon, lat]',
         opacity=0.9,
-        get_weight=1, # Cada ponto tem o mesmo peso
+        get_weight=1,
         threshold=0.05,
         radius_pixels=40
     )
 
-    # Renderiza o mapa
     st.pydeck_chart(pdk.Deck(
         map_style='mapbox://styles/mapbox/dark-v9',
         initial_view_state=view_state,
         layers=[heatmap_layer],
-        tooltip={"text": "{Bairro}\nPedidos: {Num_Pedidos}"} # Tooltip a ser ajustado/melhorado
+        tooltip={"text": "Bairro: {Bairro}\nCEP: {CEP}"}
     ))
