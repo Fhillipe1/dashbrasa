@@ -33,7 +33,7 @@ div[data-testid="stExpander"] div[data-testid="stMultiSelect"] label {
     transition: box-shadow 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
-    justify-content: center; 
+    justify-content: center;
 }
 
 .metric-card:hover {
@@ -77,4 +77,9 @@ hr.metric-divider {
     text-align: center;
     margin: 2px 0;
     line-height: 1.2;
+}
+
+/* Garante que o ícone seja renderizado corretamente */
+i.bi {
+    vertical-align: middle;
 }
