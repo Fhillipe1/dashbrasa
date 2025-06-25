@@ -2,9 +2,13 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.figure_factory as ff # Importa o figure_factory
 import textwrap
 import altair as alt
 import os
+import folium
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -169,75 +173,45 @@ def criar_donut_cancelamentos_por_canal(df_cancelados):
     canal_counts = df_cancelados['Canal de venda'].value_counts().reset_index(); canal_counts.columns = ['Canal', 'Contagem']
     chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(theta=alt.Theta(field="Contagem", type="quantitative"), color=alt.Color(field="Canal", type="nominal", title="Canal"), tooltip=['Canal', 'Contagem']).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
-    
-# --- FUNÇÃO ATUALIZADA E CORRIGIDA ---
-def criar_donut_e_resumo_canais(df):
-    st.markdown("#### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
-    if df.empty:
-        st.info("Não há dados para exibir na análise de canais."); return
-        
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        df_canal = df.groupby('Canal de venda').agg(Faturamento=('Total', 'sum'), Pedidos=('Pedido', 'count')).reset_index()
-        df_canal['Ticket Medio'] = df_canal.apply(lambda r: r['Faturamento']/r['Pedidos'] if r['Pedidos']>0 else 0, axis=1)
-        df_canal['Faturamento Formatado'] = df_canal['Faturamento'].apply(formatar_moeda)
-        df_canal['Ticket Medio Formatado'] = df_canal['Ticket Medio'].apply(formatar_moeda)
-        chart = alt.Chart(df_canal).mark_arc(innerRadius=80, outerRadius=120).encode(
-            theta=alt.Theta(field="Faturamento", type="quantitative", stack=True),
-            color=alt.Color(field="Canal de venda", type="nominal", legend=alt.Legend(title="Canais de Venda")),
-            tooltip=[alt.Tooltip('Canal de venda', title='Canal'), alt.Tooltip('Faturamento Formatado', title='Faturamento'), alt.Tooltip('Pedidos', title='Nº de Pedidos'), alt.Tooltip('Ticket Medio Formatado', title='Ticket Médio')]
-        )
-        st.altair_chart(chart, use_container_width=True)
-    with col2:
-        st.markdown("###### Insights sobre os Canais")
-        ticket_medio_geral = df['Total'].sum() / len(df) if len(df) > 0 else 0
-        df_canal_sorted = df_canal.sort_values(by="Faturamento", ascending=False)
-        
-        # CORREÇÃO FINAL: Usando st.write e st.badge para evitar erros de formatação
-        for index, row in df_canal_sorted.iterrows():
-            canal = row['Canal de venda']
-            tm_canal = row['Ticket Medio']
-            
-            # Define o status do ticket médio em relação à média geral
-            if tm_canal > ticket_medio_geral * 1.02: # Acima da média (com margem de 2%)
-                status_cor = "green"
-                status_texto = "Acima da média"
-            elif tm_canal < ticket_medio_geral * 0.98: # Abaixo da média (com margem de 2%)
-                status_cor = "red"
-                status_texto = "Abaixo da média"
-            else:
-                status_cor = "orange"
-                status_texto = "Na média"
-            
-            # Usa colunas para alinhar o texto e o badge
-            insight_cols = st.columns([4, 2])
-            with insight_cols[0]:
-                st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**")
-            with insight_cols[1]:
-                st.badge(status_texto, color=status_cor)
 
-def criar_boxplot_e_analise_outliers(df):
-    st.markdown("#### <i class='bi bi-box-seam'></i> Análise de Dispersão de Valores", unsafe_allow_html=True)
+# --- FUNÇÃO ATUALIZADA E SUBSTITUÍDA ---
+def criar_distplot_e_analise(df):
+    st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
     if df.empty:
-        st.info("Não há dados para a análise de dispersão."); return
+        st.info("Não há dados para a análise de dispersão.")
+        return
+
     col1, col2 = st.columns([1, 1])
     with col1:
-        # CORREÇÃO: Removendo 'extent' para que os outliers sejam mostrados
-        chart = alt.Chart(df).mark_boxplot(outliers=True).encode(
-            y=alt.Y('Total:Q', title='Valor do Pedido (R$)', scale=alt.Scale(zero=False)),
-            tooltip=[alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'), alt.Tooltip('Total:Q', title='Valor do Pedido', format='R$,.2f')]
-        ).properties(height=350, title="Distribuição Geral dos Valores de Pedido")
-        st.altair_chart(chart, use_container_width=True)
+        # Prepara os dados para o distplot: uma lista de arrays, um para cada dia
+        dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
+        hist_data = [df[df['Dia da Semana'] == dia]['Total'] for dia in dias_semana]
+        group_labels = [dia.split('. ')[1] for dia in dias_semana]
+
+        # Remove dias sem dados para evitar erros no gráfico
+        hist_data_filtrado = [data for data in hist_data if not data.empty]
+        group_labels_filtrado = [label for data, label in zip(hist_data, group_labels) if not data.empty]
+
+        if not hist_data_filtrado:
+             st.info("Não há dados suficientes para gerar o gráfico de distribuição.")
+             return
+
+        fig = ff.create_distplot(hist_data_filtrado, group_labels_filtrado, show_hist=False, show_rug=False)
+        fig.update_layout(template="streamlit", showlegend=True, yaxis_title="Densidade", xaxis_title="Valor do Pedido (R$)", margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
+        st.plotly_chart(fig, use_container_width=True)
+    
     with col2:
         st.markdown("###### O que este gráfico significa?")
-        st.markdown("O **Boxplot** mostra a distribuição de todos os valores de pedidos. A 'caixa' representa onde se concentra 50% dos seus pedidos. As linhas (os 'bigodes') mostram a variação normal, e os **pontos fora delas são outliers** - pedidos com valor muito acima ou abaixo do padrão.")
+        st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
+        
         Q1 = df['Total'].quantile(0.25); Q3 = df['Total'].quantile(0.75); IQR = Q3 - Q1
         limite_superior = Q3 + 1.5 * IQR
         outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
+        
         if not outliers.empty:
             st.markdown("###### Pedidos com Valores Atípicos (Acima)")
             for index, row in outliers.head(5).iterrows():
-                data_formatada = row['Data'].strftime('%d/%m')
+                data_formatada = pd.to_datetime(row['Data']).strftime('%d/%m')
                 st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
