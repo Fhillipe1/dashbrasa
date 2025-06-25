@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import textwrap
 import altair as alt
 import pydeck as pdk
+import os # Adicionado para carregar o cache de CEPs
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -167,22 +168,21 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         st.warning("Não foi possível gerar o mapa. Nenhum CEP dos pedidos foi encontrado no cache de coordenadas.")
         return
 
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Cria um DataFrame limpo apenas com as colunas necessárias para o mapa
-    df_map_data = df_mapa[['lat', 'lon', 'Bairro', 'CEP']].copy()
-    df_map_data['lat'] = pd.to_numeric(df_map_data['lat'])
-    df_map_data['lon'] = pd.to_numeric(df_map_data['lon'])
+    df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
+    df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
+
+    df_map_data = df_mapa[['lon', 'lat', 'Bairro', 'CEP']].copy()
 
     view_state = pdk.ViewState(
         latitude=float(df_map_data['lat'].mean()),
         longitude=float(df_map_data['lon'].mean()),
-        zoom=11,
-        pitch=50,
+        zoom=10.5,
+        pitch=30,
     )
 
     heatmap_layer = pdk.Layer(
         'HeatmapLayer',
-        data=df_map_data, # Usa o dataframe limpo
+        data=df_map_data,
         get_position='[lon, lat]',
         opacity=0.8,
         get_weight=1,
@@ -190,8 +190,9 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         radius_pixels=40
     )
 
+    # CORREÇÃO: Usando um mapa base gratuito do Carto que não exige chave de API
     st.pydeck_chart(pdk.Deck(
-        map_style='mapbox://styles/mapbox/dark-v9',
+        map_style='https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl.json',
         initial_view_state=view_state,
         layers=[heatmap_layer],
         tooltip={"text": "Bairro: {Bairro}\nCEP: {CEP}"}
