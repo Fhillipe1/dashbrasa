@@ -72,14 +72,10 @@ def tratar_dados_saipos(df_bruto):
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
 
-    # --- CORREÇÃO FINAL PARA FORMATO DE TEXTO ---
-    # Converte as colunas de data/hora para texto no formato desejado antes de salvar.
     for temp_df in [df_validos, df_cancelados]:
         if 'Data da venda' in temp_df.columns:
-            # Converte 'Data da venda' para o formato 'AAAA-MM-DD HH:MM:SS'
             temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda']).dt.strftime('%Y-%m-%d %H:%M:%S')
         if 'Data' in temp_df.columns:
-             # Garante que a coluna 'Data' seja apenas 'AAAA-MM-DD'
             temp_df['Data'] = pd.to_datetime(temp_df['Data']).dt.strftime('%Y-%m-%d')
 
     return df_validos, df_cancelados
@@ -98,49 +94,81 @@ def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
 
     try:
         spreadsheet = gc.open(sheet_name)
-        _atualizar_aba(spreadsheet, 0, "Página1", df_novos_validos)
-        # Assumindo que a segunda aba se chamará "Cancelados"
-        _atualizar_aba(spreadsheet, 1, "Cancelados", df_novos_cancelados)
+        _atualizar_aba(spreadsheet, "Página1", df_novos_validos)
+        _atualizar_aba(spreadsheet, "Cancelados", df_novos_cancelados)
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar os dados para o Google Sheets: {e}")
 
-def _atualizar_aba(spreadsheet, index, nome_aba, df_novos):
+def _atualizar_aba(spreadsheet, nome_aba, df_novos):
     """Função auxiliar para atualizar uma aba específica."""
     try:
         worksheet = spreadsheet.worksheet(nome_aba)
     except gspread.WorksheetNotFound:
         st.write(f"Aba '{nome_aba}' não encontrada. Criando uma nova...")
-        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="100", cols="40") # Aumentando o número de colunas por segurança
+        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="100", cols="40")
     
     st.write(f"Lendo dados existentes da aba '{nome_aba}'...")
     df_existente = get_as_dataframe(worksheet, evaluate_formulas=False)
     
-    # Padroniza tudo para string para uma comparação segura de duplicatas
-    if not df_existente.empty:
-      df_existente = df_existente.astype(str)
-    
+    df_existente = df_existente.astype(str)
     df_novos = df_novos.astype(str)
 
     if df_existente.empty:
         st.write(f"Aba '{nome_aba}' vazia. Adicionando {len(df_novos)} novas linhas.")
         set_with_dataframe(worksheet, df_novos, include_index=False, resize=True)
     else:
-        # Garante que as colunas de ambos os dataframes sejam as mesmas para a concatenação
         colunas_comuns = list(set(df_existente.columns) & set(df_novos.columns))
         df_existente_comum = df_existente[colunas_comuns]
         df_novos_comum = df_novos[colunas_comuns]
 
-        # Combina os dataframes e remove as duplicatas completas
         df_combinado = pd.concat([df_existente_comum, df_novos_comum]).drop_duplicates(keep=False)
         
-        # As linhas restantes no df_combinado são as verdadeiramente novas
         if not df_combinado.empty:
-            # Filtra o df_novos original para garantir que estamos adicionando apenas as linhas que devem ser novas
             df_para_adicionar = df_novos[df_novos['Pedido'].isin(df_combinado['Pedido'])]
             if not df_para_adicionar.empty:
                 st.write(f"Adicionando {len(df_para_adicionar)} novas linhas à aba '{nome_aba}'...")
                 worksheet.append_rows(df_para_adicionar.values.tolist(), value_input_option='USER_ENTERED')
             else:
-                 st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'. A planilha já está atualizada.")
+                 st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'.")
         else:
-            st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'. A planilha já está atualizada.")
+            st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'.")
+
+
+def ler_dados_do_gsheets():
+    """Lê os dados das abas 'Página1' e 'Cancelados' do Google Sheets e os retorna como DataFrames."""
+    gc = _get_google_sheets_client()
+    if gc is None:
+        st.error("Falha na conexão com o Google Sheets.")
+        return pd.DataFrame(), pd.DataFrame()
+
+    sheet_name = st.secrets.get("GOOGLE_SHEET_NAME")
+    if not sheet_name:
+        st.error("Nome da planilha não configurado nos segredos.")
+        return pd.DataFrame(), pd.DataFrame()
+        
+    try:
+        spreadsheet = gc.open(sheet_name)
+        
+        # Ler dados válidos
+        try:
+            worksheet_validos = spreadsheet.worksheet("Página1")
+            df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False)
+            df_validos.dropna(how='all', inplace=True) # Remove linhas totalmente vazias
+        except gspread.WorksheetNotFound:
+            st.warning("Aba 'Página1' não encontrada. Retornando DataFrame vazio.")
+            df_validos = pd.DataFrame()
+
+        # Ler dados cancelados
+        try:
+            worksheet_cancelados = spreadsheet.worksheet("Cancelados")
+            df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False)
+            df_cancelados.dropna(how='all', inplace=True)
+        except gspread.WorksheetNotFound:
+            st.warning("Aba 'Cancelados' não encontrada. Retornando DataFrame vazio.")
+            df_cancelados = pd.DataFrame()
+            
+        return df_validos, df_cancelados
+
+    except Exception as e:
+        st.error(f"Ocorreu um erro ao ler os dados do Google Sheets: {e}")
+        return pd.DataFrame(), pd.DataFrame()
