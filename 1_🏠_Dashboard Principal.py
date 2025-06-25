@@ -19,9 +19,9 @@ st.sidebar.title("Navegação")
 # --- CARREGAMENTO DOS DADOS ---
 @st.cache_data(ttl=300)
 def carregar_dados():
-    # REMOVIDO: st.toast("Lendo dados...")
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
     
+    # Tratamento para df_validos
     if not df_validos.empty:
         cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto', 'Hora', 'Ano', 'Mês']
         for col in cols_numericas:
@@ -30,9 +30,15 @@ def carregar_dados():
         if 'Data' in df_validos.columns:
             df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
             
+    # Tratamento para df_cancelados
     if not df_cancelados.empty:
+        # CORREÇÃO APLICADA AQUI: Adicionado errors='coerce' para evitar erros com dados inválidos
         if 'Data' in df_cancelados.columns:
-             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data']).dt.date
+             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data'], errors='coerce').dt.date
+        
+        # Remove linhas onde a data não pôde ser convertida
+        df_cancelados.dropna(subset=['Data'], inplace=True)
+
         if 'Hora' in df_cancelados.columns:
             df_cancelados['Hora'] = pd.to_numeric(df_cancelados['Hora'], errors='coerce').fillna(0)
 
@@ -46,7 +52,6 @@ def carregar_cache_cep():
     return pd.DataFrame(columns=['cep', 'lat', 'lon'])
 
 # --- CORPO PRINCIPAL DO APP ---
-
 df_validos, df_cancelados = carregar_dados()
 df_cache_cep = carregar_cache_cep()
 
@@ -59,9 +64,9 @@ st.markdown("---")
 
 if df_validos.empty:
     st.error("Não foi possível carregar os dados das vendas. Verifique a página 'Atualizar Relatório' ou sua Planilha Google.")
-    st.stop() # Interrompe a execução se não houver dados
+    st.stop() 
 
-# --- FILTROS (só aparecem se houver dados) ---
+# --- FILTROS NO CORPO DA PÁGINA ---
 with st.expander("📅 Aplicar Filtros e Ações", expanded=True):
     col1, col2, col3 = st.columns([2, 2, 1]) 
     
@@ -103,7 +108,6 @@ if not df_cancelados.empty:
 tab_resumo, tab_delivery, tab_cancelados_aba = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
 with tab_resumo:
-    # ... (código da aba inalterado)
     st.markdown("### <i class='bi bi-bar-chart-line-fill'></i> Visão Geral do Período Filtrado", unsafe_allow_html=True)
     visualization.criar_cards_resumo(df_filtrado)
     st.markdown("<br>", unsafe_allow_html=True)
@@ -116,7 +120,6 @@ with tab_resumo:
         visualization.criar_grafico_barras_horarios(df_filtrado)
 
 with tab_delivery:
-    # ... (código da aba inalterado)
     st.markdown("### <i class='bi bi-bicycle'></i> Análise de Entregas", unsafe_allow_html=True)
     df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
     df_delivery_total = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
@@ -130,7 +133,6 @@ with tab_delivery:
         visualization.criar_mapa_de_calor(df_delivery_filtrado, df_cache_cep)
 
 with tab_cancelados_aba:
-    # ... (código da aba inalterado)
     st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
     if df_cancelados_filtrado.empty:
         st.info("Nenhum pedido cancelado encontrado para o período selecionado.")
