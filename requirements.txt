@@ -10,3 +10,4 @@ tqdm
 altair
 folium
 streamlit-folium
+scipy
