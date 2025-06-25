@@ -10,6 +10,7 @@ LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.pn
 st.set_page_config(layout="wide", page_title="Dashboard de Vendas La Brasa", page_icon=LOGO_URL)
 visualization.aplicar_css_local("style/style.css")
 
+
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
@@ -18,13 +19,11 @@ st.sidebar.title("Navegação")
 @st.cache_data(ttl=300)
 def carregar_dados():
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
-    
     if not df_validos.empty:
         cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto', 'Hora', 'Ano', 'Mês']
         for col in cols_numericas:
             if col in df_validos.columns:
                 df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
-        
         if 'Data' in df_validos.columns:
             df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
     return df_validos, df_cancelados
@@ -48,7 +47,6 @@ if not df_validos.empty:
             data_max = df_validos['Data'].max()
             data_inicial = st.date_input("Data Inicial", value=data_min, min_value=data_min, max_value=data_max)
             data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
-        
         with col2:
             lista_canais = df_validos['Canal de venda'].dropna().unique()
             canais_disponiveis = sorted([str(canal) for canal in lista_canais])
@@ -69,7 +67,6 @@ if not df_validos.empty:
         st.markdown("<br>", unsafe_allow_html=True)
         visualization.criar_cards_dias_semana(df_filtrado)
         st.markdown("<br>", unsafe_allow_html=True)
-
         col_graf_1, col_graf_2 = st.columns(2)
         with col_graf_1:
             visualization.criar_grafico_tendencia(df_filtrado)
@@ -79,30 +76,24 @@ if not df_validos.empty:
     with tab_delivery:
         st.markdown("### <i class='bi bi-bicycle'></i> Análise de Entregas", unsafe_allow_html=True)
         
-        # Prepara os dataframes específicos para a aba de delivery
         df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
         df_delivery_total = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
 
         if df_delivery_filtrado.empty:
             st.info("Nenhum pedido de delivery encontrado para o período e filtros selecionados.")
         else:
-            # Chama a função para criar os cards de resumo de delivery
             visualization.criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total)
             st.markdown("---")
-            # Aqui adicionaremos os próximos elementos: Top 3 bairros e o mapa
-            st.info("Em breve: Top 3 bairros e mapa de calor.")
-
+            # Adicionando os cards do Top 3 Bairros
+            visualization.criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total)
+            st.markdown("---")
+            st.info("Em breve: Mapa de calor.")
 
     with tab_cancelados:
         st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
-        
-        # Filtra os cancelados com base no período selecionado
         if not df_cancelados.empty and 'Data da venda' in df_cancelados.columns:
             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
-            df_cancelados_filtrado = df_cancelados[
-                (df_cancelados['Data'] >= data_inicial) &
-                (df_cancelados['Data'] <= data_final)
-            ]
+            df_cancelados_filtrado = df_cancelados[(df_cancelados['Data'] >= data_inicial) & (df_cancelados['Data'] <= data_final)]
             st.write(f"Encontrados {len(df_cancelados_filtrado)} pedidos cancelados no período.")
             st.dataframe(df_cancelados_filtrado)
         else:
