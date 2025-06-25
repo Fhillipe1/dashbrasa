@@ -76,12 +76,15 @@ if not df_validos.empty:
         visualization.criar_cards_resumo(df_filtrado)
         
         st.markdown("<br>", unsafe_allow_html=True)
-
         visualization.criar_cards_dias_semana(df_filtrado)
-
-        st.markdown("<br>", unsafe_allow_html=True)
         
+        st.markdown("<br>", unsafe_allow_html=True)
         visualization.criar_grafico_tendencia(df_filtrado)
+
+        # --- NOVO GRÁFICO DE BARRAS POR HORA ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        visualization.criar_grafico_barras_horarios(df_filtrado)
+
 
     with tab_delivery:
         st.header("Análise de Entregas")
