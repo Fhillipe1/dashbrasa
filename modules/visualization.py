@@ -54,7 +54,6 @@ def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
     dias_no_total = df_delivery_total['Data'].nunique()
     media_pedidos_diaria_total = len(df_delivery_total) / dias_no_total if dias_no_total > 0 else 0
     delta_pedidos_percent = ((media_pedidos_diaria_filtro - media_pedidos_diaria_total) / media_pedidos_diaria_total) * 100 if media_pedidos_diaria_total > 0 else 0
-    
     col1, col2, col3, col4 = st.columns(4)
     with col1: criar_card("Total de Entregas", f"{qtd_entregas}", "<i class='bi bi-truck'></i>")
     with col2: criar_card("Faturamento Delivery", formatar_moeda(faturamento_delivery), "<i class='bi bi-cash-stack'></i>")
@@ -175,16 +174,20 @@ def criar_donut_cancelamentos_por_canal(df_cancelados):
     st.altair_chart(chart, use_container_width=True)
 
 def criar_donut_e_resumo_canais(df):
+    st.markdown("#### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para exibir na análise de canais."); return
-    st.markdown("#### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     with col1:
         df_canal = df.groupby('Canal de venda').agg(Faturamento=('Total', 'sum'), Pedidos=('Pedido', 'count')).reset_index()
         df_canal['Ticket Medio'] = df_canal.apply(lambda r: r['Faturamento']/r['Pedidos'] if r['Pedidos']>0 else 0, axis=1)
         df_canal['Faturamento Formatado'] = df_canal['Faturamento'].apply(formatar_moeda)
         df_canal['Ticket Medio Formatado'] = df_canal['Ticket Medio'].apply(formatar_moeda)
-        chart = alt.Chart(df_canal).mark_arc(innerRadius=80, outerRadius=120).encode(theta=alt.Theta(field="Faturamento", type="quantitative", stack=True), color=alt.Color(field="Canal de venda", type="nominal", legend=alt.Legend(title="Canais de Venda")), tooltip=[alt.Tooltip('Canal de venda', title='Canal'), alt.Tooltip('Faturamento Formatado', title='Faturamento'), alt.Tooltip('Pedidos', title='Nº de Pedidos'), alt.Tooltip('Ticket Medio Formatado', title='Ticket Médio')])
+        chart = alt.Chart(df_canal).mark_arc(innerRadius=80, outerRadius=120).encode(
+            theta=alt.Theta(field="Faturamento", type="quantitative", stack=True),
+            color=alt.Color(field="Canal de venda", type="nominal", legend=alt.Legend(title="Canais de Venda")),
+            tooltip=[alt.Tooltip('Canal de venda', title='Canal'), alt.Tooltip('Faturamento Formatado', title='Faturamento'), alt.Tooltip('Pedidos', title='Nº de Pedidos'), alt.Tooltip('Ticket Medio Formatado', title='Ticket Médio')]
+        )
         st.altair_chart(chart, use_container_width=True)
     with col2:
         st.markdown("###### Insights sobre os Canais")
@@ -192,12 +195,17 @@ def criar_donut_e_resumo_canais(df):
         df_canal_sorted = df_canal.sort_values(by="Faturamento", ascending=False)
         for index, row in df_canal_sorted.iterrows():
             canal = row['Canal de venda']; tm_canal = row['Ticket Medio']
-            if tm_canal > ticket_medio_geral * 1.02: status_cor = "green"; status_texto = "Acima da média"
-            elif tm_canal < ticket_medio_geral * 0.98: status_cor = "red"; status_texto = "Abaixo da média"
-            else: status_cor = "orange"; status_texto = "Na média"
+            if tm_canal > ticket_medio_geral * 1.02:
+                status_cor = "green"; status_texto = "Acima da média"
+            elif tm_canal < ticket_medio_geral * 0.98:
+                status_cor = "red"; status_texto = "Abaixo da média"
+            else:
+                status_cor = "orange"; status_texto = "Na média"
             insight_cols = st.columns([4, 2])
-            with insight_cols[0]: st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**")
-            with insight_cols[1]: st.badge(status_texto, color=status_cor)
+            with insight_cols[0]:
+                st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**")
+            with insight_cols[1]:
+                st.badge(status_texto, color=status_cor)
 
 def criar_distplot_e_analise(df):
     st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
@@ -205,9 +213,10 @@ def criar_distplot_e_analise(df):
         st.info("Não há dados para a análise de dispersão."); return
     col1, col2 = st.columns([1, 1])
     with col1:
-        hist_data = [df[df['Dia da Semana'] == dia]['Total'] for dia in ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']]
-        group_labels = [dia.split('. ')[1] for dia in ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']]
-        hist_data_filtrado = [data for data in hist_data if not data.empty]
+        dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
+        hist_data = [df[df['Dia da Semana'] == dia]['Total'] for dia in dias_semana_ordem]
+        group_labels = [dia.split('. ')[1] for dia in dias_semana_ordem]
+        hist_data_filtrado = [data.tolist() for data in hist_data if not data.empty]
         group_labels_filtrado = [label for data, label in zip(hist_data, group_labels) if not data.empty]
         if not hist_data_filtrado:
              st.info("Não há dados suficientes para gerar o gráfico de distribuição."); return
@@ -227,40 +236,3 @@ def criar_distplot_e_analise(df):
                 st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
-
-# --- NOVA FUNÇÃO ---
-def criar_tabela_top_clientes(df_delivery):
-    """Cria uma tabela estilizada com o ranking de clientes que mais pediram."""
-    st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
-    if df_delivery.empty or 'Nome do cliente' not in df_delivery.columns:
-        st.info("Não há dados de clientes suficientes para gerar um ranking.")
-        return
-
-    # Agrega os dados por cliente
-    df_clientes = df_delivery.groupby('Nome do cliente').agg(
-        Bairro=('Bairro', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A'),
-        Telefone=('Telefone', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A'),
-        Quantidade_Pedidos=('Pedido', 'count'),
-        Valor_Total=('Total', 'sum')
-    ).reset_index()
-
-    # Ordena e cria o ranking
-    df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
-    
-    medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
-    df_clientes_sorted['Rank'] = [medalhas.get(i, f"{i+1}º") for i in df_clientes_sorted.index]
-
-    # Reordena as colunas para melhor visualização
-    df_final = df_clientes_sorted[['Rank', 'Nome do cliente', 'Bairro', 'Telefone', 'Quantidade_Pedidos', 'Valor_Total']]
-
-    # Exibe a tabela com st.dataframe e column_config
-    st.dataframe(
-        df_final,
-        column_config={
-            "Nome do cliente": st.column_config.TextColumn("Cliente", width="large"),
-            "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"),
-            "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")
-        },
-        hide_index=True,
-        use_container_width=True
-    )
