@@ -4,18 +4,18 @@ import streamlit as st
 import pandas as pd
 from modules import data_handler, visualization
 from datetime import datetime
+import os
 
 # --- CONFIGURAÇÃO DA PÁGINA E CSS ---
 LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png"
 st.set_page_config(layout="wide", page_title="Dashboard de Vendas La Brasa", page_icon=LOGO_URL)
 visualization.aplicar_css_local("style/style.css")
 
-
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
 
-# --- CARREGAMENTO DOS DADOS ---
+# --- FUNÇÕES DE CARREGAMENTO DE DADOS ---
 @st.cache_data(ttl=300)
 def carregar_dados():
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
@@ -28,7 +28,15 @@ def carregar_dados():
             df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
     return df_validos, df_cancelados
 
+@st.cache_data(ttl=600)
+def carregar_cache_cep():
+    cache_path = 'data/cep_cache.csv'
+    if os.path.exists(cache_path):
+        return pd.read_csv(cache_path, dtype={'cep': str, 'lat': str, 'lon': str})
+    return pd.DataFrame(columns=['cep', 'lat', 'lon'])
+
 df_validos, df_cancelados = carregar_dados()
+df_cache_cep = carregar_cache_cep()
 
 # --- CABEÇALHO COM LOGO E TÍTULO ---
 col_logo, col_titulo = st.columns([0.1, 0.9])
@@ -84,10 +92,10 @@ if not df_validos.empty:
         else:
             visualization.criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total)
             st.markdown("---")
-            # Adicionando os cards do Top 3 Bairros
             visualization.criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total)
             st.markdown("---")
-            st.info("Em breve: Mapa de calor.")
+            # Adicionando o mapa de calor
+            visualization.criar_mapa_de_calor(df_delivery_filtrado, df_cache_cep)
 
     with tab_cancelados:
         st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
