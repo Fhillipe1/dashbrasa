@@ -33,7 +33,9 @@ def carregar_dados():
     # Tratamento para df_cancelados
     if not df_cancelados.empty:
         if 'Data da venda' in df_cancelados.columns:
-             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
+            df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
+        if 'Hora' in df_cancelados.columns:
+            df_cancelados['Hora'] = pd.to_numeric(df_cancelados['Hora'], errors='coerce').fillna(0)
 
     return df_validos, df_cancelados
 
@@ -55,7 +57,6 @@ with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
 
-
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
     with st.expander("📅 Aplicar Filtros", expanded=True):
@@ -76,12 +77,12 @@ if not df_validos.empty:
         (df_validos['Canal de venda'].isin(canais_selecionados))
     ]
     
-    # Filtra também os cancelados pelo mesmo período de data
-    df_cancelados_filtrado = df_cancelados[
-        (df_cancelados['Data'] >= data_inicial) &
-        (df_cancelados['Data'] <= data_final)
-    ]
-
+    df_cancelados_filtrado = pd.DataFrame()
+    if not df_cancelados.empty:
+        df_cancelados_filtrado = df_cancelados[
+            (df_cancelados['Data'] >= data_inicial) &
+            (df_cancelados['Data'] <= data_final)
+        ]
 
     # --- ESTRUTURA DE ABAS ---
     tab_resumo, tab_delivery, tab_cancelados_aba = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
@@ -116,9 +117,16 @@ if not df_validos.empty:
         if df_cancelados_filtrado.empty:
             st.info("Nenhum pedido cancelado encontrado para o período selecionado.")
         else:
-            # Chama as novas funções de visualização para cancelados
             visualization.criar_cards_cancelamento_resumo(df_cancelados_filtrado, df_filtrado)
             st.markdown("---")
             visualization.criar_grafico_motivos_cancelamento(df_cancelados_filtrado)
+            st.markdown("---")
+            
+            # Adicionando os novos gráficos
+            col_cancel_1, col_cancel_2 = st.columns(2)
+            with col_cancel_1:
+                visualization.criar_grafico_cancelamentos_por_hora(df_cancelados_filtrado)
+            with col_cancel_2:
+                visualization.criar_donut_cancelamentos_por_canal(df_cancelados_filtrado)
 else:
     st.error("Não foi possível carregar os dados. Verifique a página 'Atualizar Relatório' ou a sua Planilha Google.")
