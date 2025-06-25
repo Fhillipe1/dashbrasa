@@ -18,8 +18,7 @@ visualization.aplicar_css_local("style/style.css")
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
-st.sidebar.markdown("Selecione uma página abaixo:")
-# O Streamlit cria os links para as outras páginas automaticamente aqui.
+# O Streamlit irá inserir os links para as páginas da pasta /pages aqui automaticamente
 
 
 # --- CARREGAMENTO DOS DADOS ---
@@ -60,7 +59,11 @@ if not df_validos.empty:
             data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
         
         with col2:
-            canais_disponiveis = sorted(df_validos['Canal de venda'].unique())
+            # --- CORREÇÃO DO ERRO TYPEERROR APLICADA AQUI ---
+            # Removemos valores nulos, convertemos para string e depois ordenamos
+            lista_canais = df_validos['Canal de venda'].dropna().unique()
+            canais_disponiveis = sorted([str(canal) for canal in lista_canais])
+            
             canais_selecionados = st.multiselect("Canal de Venda", options=canais_disponiveis, default=canais_disponiveis)
 
     df_filtrado = df_validos[
@@ -73,7 +76,8 @@ if not df_validos.empty:
     tab_resumo, tab_delivery, tab_cancelados = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
-        # Cards de Resumo Geral
+        st.header("Visão Geral do Período Filtrado")
+        
         col1, col2, col3 = st.columns(3)
         with col1:
             faturamento_sem_taxas = df_filtrado['Total'].sum() - df_filtrado['Total taxa de serviço'].sum()
@@ -87,12 +91,10 @@ if not df_validos.empty:
         
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Cards Diários
         visualization.criar_cards_dias_semana(df_filtrado)
 
         st.markdown("<br>", unsafe_allow_html=True)
-
-        # Gráfico de Tendência
+        
         visualization.criar_grafico_tendencia(df_filtrado)
 
     with tab_delivery:
