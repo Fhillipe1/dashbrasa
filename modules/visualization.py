@@ -157,11 +157,8 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         st.warning("O arquivo de cache de CEPs está vazio. Atualize os relatórios para gerá-lo.")
         return
         
-    # --- CORREÇÃO APLICADA AQUI ---
-    # Força a conversão de ambas as chaves para string ANTES do merge para garantir compatibilidade
     df_delivery['CEP'] = df_delivery['CEP'].astype(str)
     df_cache_cep['cep'] = df_cache_cep['cep'].astype(str)
-    
     df_mapa = pd.merge(df_delivery, df_cache_cep, left_on='CEP', right_on='cep', how='left')
     
     df_mapa.dropna(subset=['lat', 'lon'], inplace=True)
@@ -173,9 +170,11 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
     df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
     df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
 
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Converte a média (que é um tipo numpy) para um float padrão do Python
     view_state = pdk.ViewState(
-        latitude=df_mapa['lat'].mean(),
-        longitude=df_mapa['lon'].mean(),
+        latitude=float(df_mapa['lat'].mean()),
+        longitude=float(df_mapa['lon'].mean()),
         zoom=11,
         pitch=50,
     )
