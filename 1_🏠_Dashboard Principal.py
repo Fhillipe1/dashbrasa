@@ -67,9 +67,10 @@ if not df_validos.empty:
         visualization.criar_cards_dias_semana(df_filtrado)
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- AJUSTE DE LAYOUT DOS GRÁFICOS ---
         col_graf_1, col_graf_2 = st.columns(2)
         with col_graf_1:
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Corrigido o nome da função para 'criar_grafico_tendencia'
             visualization.criar_grafico_tendencia(df_filtrado)
         with col_graf_2:
             visualization.criar_grafico_barras_horarios(df_filtrado)
