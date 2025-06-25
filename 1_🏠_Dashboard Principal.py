@@ -10,6 +10,7 @@ LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.pn
 st.set_page_config(layout="wide", page_title="Dashboard de Vendas La Brasa", page_icon=LOGO_URL)
 visualization.aplicar_css_local("style/style.css")
 
+
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
@@ -29,6 +30,7 @@ def carregar_dados():
 
 df_validos, df_cancelados = carregar_dados()
 
+
 # --- CABEÇALHO COM LOGO E TÍTULO ---
 col_logo, col_titulo = st.columns([0.1, 0.9])
 with col_logo:
@@ -36,6 +38,7 @@ with col_logo:
 with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
+
 
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
@@ -69,8 +72,6 @@ if not df_validos.empty:
 
         col_graf_1, col_graf_2 = st.columns(2)
         with col_graf_1:
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Corrigido o nome da função para 'criar_grafico_tendencia'
             visualization.criar_grafico_tendencia(df_filtrado)
         with col_graf_2:
             visualization.criar_grafico_barras_horarios(df_filtrado)
