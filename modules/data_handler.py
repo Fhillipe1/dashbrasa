@@ -46,17 +46,22 @@ def tratar_dados_saipos(df_bruto):
 
     for temp_df in [df_validos, df_cancelados]:
         if not temp_df.empty and 'Data da venda' in temp_df.columns:
-            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], errors='coerce')
+            # --- CORREÇÃO APLICADA AQUI ---
+            # Adicionado dayfirst=True para garantir a leitura correta do formato DD/MM/AAAA
+            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], dayfirst=True, errors='coerce')
+            
             temp_df.dropna(subset=['Data da venda'], inplace=True)
+            
+            # Padroniza o fuso horário
             if temp_df['Data da venda'].dt.tz is None:
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_horario)
             else:
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_convert(fuso_horario)
 
-
     if not df_validos.empty:
-        hoje = datetime.now(fuso_horario)
-        df_validos = df_validos[df_validos['Data da venda'] <= hoje].copy()
+        # Removido o filtro de datas futuras para garantir que todos os dados do relatório sejam processados.
+        # hoje = datetime.now(fuso_horario)
+        # df_validos = df_validos[df_validos['Data da venda'] <= hoje].copy()
         
         df_validos['Data'] = df_validos['Data da venda'].dt.date
         df_validos['Hora'] = df_validos['Data da venda'].dt.hour
@@ -71,7 +76,7 @@ def tratar_dados_saipos(df_bruto):
                 df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
         
         delivery_channels = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
-        if 'Canal de venda' in df.columns:
+        if 'Canal de venda' in df_validos.columns:
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
 
@@ -97,9 +102,7 @@ def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
 
     try:
         spreadsheet = gc.open(sheet_name)
-        # Atualiza a aba de vendas válidas
         _atualizar_aba(spreadsheet, 0, "Página1", df_novos_validos)
-        # Atualiza a aba de vendas canceladas
         _atualizar_aba(spreadsheet, 1, "Cancelados", df_novos_cancelados)
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar os dados para o Google Sheets: {e}")
@@ -114,7 +117,7 @@ def _atualizar_aba(spreadsheet, index, nome_aba, df_novos):
     
     st.write(f"Lendo dados existentes da aba '{nome_aba}'...")
     df_existente = get_as_dataframe(worksheet, evaluate_formulas=False)
-    # Garante que colunas de data sejam strings para comparação
+    
     if not df_existente.empty:
       df_existente = df_existente.astype(str)
     
@@ -124,15 +127,15 @@ def _atualizar_aba(spreadsheet, index, nome_aba, df_novos):
         st.write(f"Aba '{nome_aba}' vazia. Adicionando {len(df_novos_str)} novas linhas.")
         set_with_dataframe(worksheet, df_novos_str, include_index=False, resize=True)
     else:
-        # Lógica para não adicionar duplicatas perfeitas
+        # Combina os dataframes e remove as duplicatas completas
         df_combinado = pd.concat([df_existente, df_novos_str]).drop_duplicates(keep=False)
         
-        # As linhas que sobraram em df_combinado são as que estavam em df_novos mas não em df_existente
+        # Filtra o df_combinado para manter apenas as linhas que estão no df_novos (as verdadeiramente novas)
+        # Usamos o 'Pedido' como chave primária para garantir a correspondência correta
         df_para_adicionar = df_novos_str[df_novos_str['Pedido'].isin(df_combinado['Pedido'])]
 
         if not df_para_adicionar.empty:
             st.write(f"Adicionando {len(df_para_adicionar)} novas linhas à aba '{nome_aba}'...")
-            # Append rows para adicionar ao final da planilha
             worksheet.append_rows(df_para_adicionar.values.tolist(), value_input_option='USER_ENTERED')
         else:
             st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'. A planilha já está atualizada.")
