@@ -240,31 +240,35 @@ def criar_distplot_e_analise(df):
 def criar_tabela_top_clientes(df_delivery):
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
     
-    # Lista de nomes de coluna possíveis para o nome do cliente
-    nome_coluna_cliente = 'Consumidor'
-            
-    if df_delivery.empty or nome_coluna_cliente not in df_delivery.columns or df_delivery[nome_coluna_cliente].isnull().all():
-        st.info("Não foi possível encontrar a coluna 'Consumidor' ou não há dados de clientes para gerar um ranking.")
+    # Adicionada verificação de segurança
+    if df_delivery.empty or 'Consumidor' not in df_delivery.columns:
+        st.info("Não foi possível encontrar a coluna 'Consumidor' ou não há dados de delivery para gerar um ranking.")
+        return
+    
+    # Remove linhas onde o nome do consumidor é nulo ou vazio
+    df_delivery_com_cliente = df_delivery.dropna(subset=['Consumidor'])
+    if df_delivery_com_cliente.empty:
+        st.info("Não há nomes de clientes válidos para gerar um ranking.")
         return
 
-    # CORREÇÃO: Agrega os dados usando uma lista de colunas existentes
+    # Monta o dicionário de agregação dinamicamente
     agg_dict = {
         'Quantidade_Pedidos': ('Pedido', 'count'),
         'Valor_Total': ('Total', 'sum')
     }
-    if 'Bairro' in df_delivery.columns:
+    if 'Bairro' in df_delivery_com_cliente.columns:
         agg_dict['Bairro'] = ('Bairro', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
-    if 'Canal de venda' in df_delivery.columns:
+    if 'Canal de venda' in df_delivery_com_cliente.columns:
         agg_dict['Canal_Preferido'] = ('Canal de venda', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
-        
-    df_clientes = df_delivery.groupby(nome_coluna_cliente).agg(**agg_dict).reset_index()
 
+    df_clientes = df_delivery_com_cliente.groupby('Consumidor').agg(**agg_dict).reset_index()
+    
     df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
     
     medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
     df_clientes_sorted['Rank'] = [medalhas.get(i, f"{i+1}º") for i in df_clientes_sorted.index]
     
-    df_clientes_sorted.rename(columns={nome_coluna_cliente: 'Cliente'}, inplace=True)
+    df_clientes_sorted.rename(columns={'Consumidor': 'Cliente'}, inplace=True)
     
     colunas_para_exibir = ['Rank', 'Cliente']
     if 'Bairro' in df_clientes_sorted.columns: colunas_para_exibir.append('Bairro')
