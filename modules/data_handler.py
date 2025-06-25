@@ -38,7 +38,6 @@ def _get_google_sheets_client():
 
 def extrair_dados_saipos(download_path):
     SAIPOS_LOGIN_URL = 'https://conta.saipos.com/#/access/login'
-    REPORT_URL = 'https://conta.saipos.com/#/app/report/sales-by-period'
     SAIPOS_USER = st.secrets.get("SAIPOS_USER")
     SAIPOS_PASSWORD = st.secrets.get("SAIPOS_PASSWORD")
 
@@ -79,15 +78,14 @@ def extrair_dados_saipos(download_path):
                 fix_hairline=True,
                 )
         
-        wait = WebDriverWait(driver, 20)
-        short_wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 30) # Espera principal
+        short_wait = WebDriverWait(driver, 5) # Espera curta para o pop-up
 
         st.write("Acessando a página de login da Saipos...")
         driver.get(SAIPOS_LOGIN_URL)
 
         st.write("Aguardando campo de e-mail ficar visível...")
         email_field = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input[placeholder='E-mail']")))
-        st.write("Campo de e-mail encontrado. Preenchendo...")
         email_field.send_keys(SAIPOS_USER)
 
         password_field = driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']")
@@ -95,25 +93,29 @@ def extrair_dados_saipos(download_path):
 
         st.write("Aguardando botão de login ficar clicável...")
         login_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[ng-click='lctrl.login()']")))
-        st.write("Botão encontrado. Clicando para fazer login...")
         login_button.click()
         
-        # --- LÓGICA PARA LIDAR COM SESSÃO ATIVA ---
         try:
             st.write("Verificando se há pop-up de sessão ativa...")
-            confirm_button = short_wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "button.confirm")))
+            confirm_button = short_wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.confirm")))
             st.info("Pop-up de sessão ativa detectado! Clicando em 'Sim' para continuar...")
             confirm_button.click()
         except TimeoutException:
             st.write("Nenhum pop-up de sessão ativa encontrado. Continuando normalmente.")
-            pass # Se o botão não aparecer em 10 segundos, significa que o login foi direto.
         
-        st.write("Aguardando processamento após login...")
-        time.sleep(10)
+        st.write("Aguardando painel principal carregar após login...")
+        wait.until(EC.visibility_of_element_located((By.ID, "menu-trigger")))
+        
+        st.write("Navegando via menu: Clicando no menu principal...")
+        menu_trigger = wait.until(EC.element_to_be_clickable((By.ID, "menu-trigger")))
+        menu_trigger.click()
+        
+        st.write("Navegando via menu: Clicando em 'Vendas por período'...")
+        vendas_link = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[href="#/app/report/sales-by-period"]')))
+        vendas_link.click()
 
-        st.write("Navegando para a página de relatórios...")
-        driver.get(REPORT_URL)
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, 'h1')))
+        st.write("Aguardando a página de relatórios carregar...")
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]')))
 
         st.write("Preenchendo o período do relatório...")
         campos_de_data = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "input[id='datePickerSaipos']")))
@@ -122,21 +124,26 @@ def extrair_dados_saipos(download_path):
         data_inicial_texto = "01/01/2020"
         data_final_texto = datetime.now().strftime("%d/%m/%Y")
         
-        driver.execute_script(f"arguments[0].value = '{data_inicial_texto}';", data_inicial_campo)
-        driver.execute_script(f"arguments[0].value = '{data_final_texto}';", data_final_campo)
-        time.sleep(2)
+        data_inicial_campo.clear()
+        data_inicial_campo.send_keys(data_inicial_texto)
+        
+        data_final_campo.clear()
+        data_final_campo.send_keys(data_final_texto)
+        time.sleep(1) # Pequena pausa para o site processar as datas
 
         st.write("Clicando em 'Buscar'...")
         buscar_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click*="vm.searchApiSales()"]')))
         buscar_button.click()
-        time.sleep(5)
+        
+        st.write("Aguardando resultados da busca...")
+        time.sleep(5) # Pausa para a tabela de resultados carregar
 
         st.write("Clicando em 'Exportar' para baixar o arquivo .xlsx...")
         exportar_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[ng-click="vm.exportReportPeriod();"]')))
         exportar_button.click()
 
-        st.write("Aguardando o download finalizar...")
-        time.sleep(45)
+        st.write("Aguardando o download finalizar (até 60s)...")
+        time.sleep(60)
         
         report_files = [f for f in os.listdir(download_path) if f.endswith('.xlsx')]
         if not report_files:
@@ -210,7 +217,7 @@ def tratar_dados_saipos(df_bruto):
                 df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
         
         delivery_channels = ['IFOOD', 'SITE DELIVERY (SAIPOS)', 'BRENDI']
-        if 'Canal de venda' in df_validos.columns:
+        if 'Canal de venda' in df.columns:
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
 
