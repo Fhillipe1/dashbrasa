@@ -46,7 +46,8 @@ def criar_cards_resumo(df):
 
 def criar_cards_dias_semana(df):
     """Cria 7 cards para os dias da semana, com estilo customizado e todas as métricas."""
-    st.subheader(":icon[calendar-week] Análise por Dia da Semana")
+    # CORREÇÃO: Usando st.markdown para garantir que o ícone renderize
+    st.markdown("#### :icon[calendar-week] Análise por Dia da Semana")
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
     
@@ -58,14 +59,14 @@ def criar_cards_dias_semana(df):
         with cols[i]:
             df_dia = df[df['Dia da Semana'] == dia]
 
-            # Inicia a construção do card com Markdown
-            st.markdown(f"""
-            <div class="metric-card" style="height: 250px;">
-                <div class="metric-label">{nome_dia_semana}</div>
-            """, unsafe_allow_html=True)
-
+            # CORREÇÃO: Construindo todo o card em um único bloco HTML
             if df_dia.empty:
-                st.markdown("<div class='metric-value' style='font-size: 1rem;'>Sem dados</div>", unsafe_allow_html=True)
+                card_html = f"""
+                <div class="metric-card" style="height: 220px;">
+                    <div class="metric-label">{nome_dia_semana}</div>
+                    <div class='metric-value' style='font-size: 1rem; color: #555;'>Sem dados</div>
+                </div>
+                """
             else:
                 total_vendas_dia = df_dia['Total'].sum()
                 num_pedidos_dia = len(df_dia)
@@ -84,23 +85,26 @@ def criar_cards_dias_semana(df):
                 num_dias_unicos = df_dia['Data'].nunique()
                 media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
 
-                # Exibe a métrica principal (Ticket Médio)
-                st.markdown(f"<div class='metric-value'>{formatar_moeda(ticket_medio)}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='metric-label' style='font-size: 0.8rem;'>Ticket Médio</div>", unsafe_allow_html=True)
-                
-                # Divisor e métricas secundárias
-                st.markdown("<hr class='metric-divider'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='secondary-metric'>Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='secondary-metric'>Horário Pico: <b>{horario_pico_str}</b></div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>", unsafe_allow_html=True)
-            
-            # Fecha a div do card
-            st.markdown("</div>", unsafe_allow_html=True)
+                card_html = f"""
+                <div class="metric-card" style="height: 220px;">
+                    <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
+                    <div class='metric-value' style="margin-top: 5px;">{formatar_moeda(ticket_medio)}</div>
+                    <div class='metric-label' style='font-size: 0.8rem; margin-bottom: 8px;'>Ticket Médio</div>
+                    
+                    <hr class='metric-divider'>
+                    
+                    <div class='secondary-metric'>Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></div>
+                    <div class='secondary-metric'>Horário Pico: <b>{horario_pico_str}</b></div>
+                    <div class='secondary-metric'>Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></div>
+                </div>
+                """
+            st.markdown(card_html, unsafe_allow_html=True)
 
 
 def criar_grafico_tendencia(df):
     """Cria um gráfico de linha com Plotly que mostra a tendência do faturamento diário."""
-    st.subheader(":icon[graph-up] Tendência do Faturamento Diário")
+    # CORREÇÃO: Usando st.markdown para garantir que o ícone renderize
+    st.markdown("#### :icon[graph-up] Tendência do Faturamento Diário")
 
     if df.empty:
         st.info("Não há dados para o período selecionado.")
