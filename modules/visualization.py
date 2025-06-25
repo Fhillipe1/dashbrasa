@@ -4,8 +4,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import textwrap
 import altair as alt
-import pydeck as pdk
-import os # Adicionado para carregar o cache de CEPs
+import os
+
+# Bibliotecas para o novo mapa
+import folium
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -151,6 +155,7 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
             card_html = textwrap.dedent(f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p><p class="metric-value">{pedidos_bairro}</p><p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p>{delta_html}<hr class="metric-divider"><p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p><p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p><p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p></div>""")
             st.markdown(card_html, unsafe_allow_html=True)
 
+# --- FUNÇÃO DO MAPA TOTALMENTE REESCRITA COM FOLIUM ---
 def criar_mapa_de_calor(df_delivery, df_cache_cep):
     st.markdown("#### <i class='bi bi-map-fill'></i> Mapa de Calor das Entregas", unsafe_allow_html=True)
     
@@ -171,29 +176,18 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
     df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
     df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
 
-    df_map_data = df_mapa[['lon', 'lat', 'Bairro', 'CEP']].copy()
+    # Centraliza o mapa
+    center_lat = float(df_mapa['lat'].mean())
+    center_lon = float(df_mapa['lon'].mean())
 
-    view_state = pdk.ViewState(
-        latitude=float(df_map_data['lat'].mean()),
-        longitude=float(df_map_data['lon'].mean()),
-        zoom=10.5,
-        pitch=30,
-    )
+    # Cria o mapa base com Folium
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=12, tiles="CartoDB dark_matter")
 
-    heatmap_layer = pdk.Layer(
-        'HeatmapLayer',
-        data=df_map_data,
-        get_position='[lon, lat]',
-        opacity=0.8,
-        get_weight=1,
-        threshold=0.05,
-        radius_pixels=40
-    )
+    # Prepara os dados para a camada de calor
+    heat_data = [[row['lat'], row['lon']] for index, row in df_mapa.iterrows()]
 
-    # CORREÇÃO: Usando um mapa base gratuito do Carto que não exige chave de API
-    st.pydeck_chart(pdk.Deck(
-        map_style='https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl.json',
-        initial_view_state=view_state,
-        layers=[heatmap_layer],
-        tooltip={"text": "Bairro: {Bairro}\nCEP: {CEP}"}
-    ))
+    # Adiciona a camada de calor ao mapa
+    HeatMap(heat_data, radius=15).add_to(m)
+
+    # Exibe o mapa no Streamlit
+    st_folium(m, use_container_width=True, height=450)
