@@ -66,6 +66,20 @@ div[data-testid="stExpander"] div[data-testid="stMultiSelect"] label {
     text-align: center;
 }
 
+/* --- NOVOS ESTILOS PARA O KPI (DELTA) --- */
+.metric-delta {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 5px;
+}
+.metric-delta-positive {
+    color: #2E8B57; /* Verde */
+}
+.metric-delta-negative {
+    color: #CD5C5C; /* Vermelho */
+}
+
 hr.metric-divider {
     margin: 10px 0;
     border-color: #444;
@@ -79,7 +93,6 @@ hr.metric-divider {
     line-height: 1.2;
 }
 
-/* Garante que o ícone seja renderizado corretamente */
 i.bi {
     vertical-align: middle;
 }
