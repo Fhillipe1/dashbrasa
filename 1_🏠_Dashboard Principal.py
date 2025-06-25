@@ -40,9 +40,9 @@ df_validos, df_cancelados = carregar_dados()
 
 
 # --- CABEÇALHO COM LOGO E TÍTULO ---
-col_logo, col_titulo = st.columns([1, 4])
+col_logo, col_titulo = st.columns([0.1, 0.9])
 with col_logo:
-    st.image(LOGO_URL, width=150)
+    st.image(LOGO_URL, width=100) # Tamanho da imagem reduzido
 with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
@@ -59,11 +59,8 @@ if not df_validos.empty:
             data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
         
         with col2:
-            # --- CORREÇÃO DO ERRO TYPEERROR APLICADA AQUI ---
-            # Removemos valores nulos, convertemos para string e depois ordenamos
             lista_canais = df_validos['Canal de venda'].dropna().unique()
             canais_disponiveis = sorted([str(canal) for canal in lista_canais])
-            
             canais_selecionados = st.multiselect("Canal de Venda", options=canais_disponiveis, default=canais_disponiveis)
 
     df_filtrado = df_validos[
