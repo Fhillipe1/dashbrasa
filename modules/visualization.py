@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import textwrap
-import numpy as np
+import altair as alt
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -16,44 +16,26 @@ def formatar_moeda(valor):
     if valor is None: return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
-# --- FUNÇÃO DE CARD APRIMORADA E MAIS SEGURA ---
 def criar_card(label, valor, icone_html, delta_text=None):
-    """Cria um card de resumo customizado, agora com suporte a um delta (KPI)."""
     delta_html = ""
-    # GARANTE que o delta_text seja tratado apenas se não for nulo.
     if delta_text is not None:
-        # Converte para string para garantir que a operação .startswith() funcione
         delta_str = str(delta_text)
-        
         if delta_str.startswith('-'):
             delta_class = "metric-delta-negative"
             seta = "▼"
         else:
             delta_class = "metric-delta-positive"
             seta = "▲"
-            # Adiciona o sinal de '+' para valores positivos, se não houver
             if not delta_str.startswith('+'):
                  delta_str = "+" + delta_str
-        
         delta_html = f"<div class='metric-delta {delta_class}'>{seta} {delta_str}</div>"
-
-    card_html = f"""
-    <div class="metric-card" style="min-height: 130px;">
-        <div class="metric-label">
-            <span class="metric-icon">{icone_html}</span>
-            <span>{label}</span>
-        </div>
-        <div class="metric-value">{valor}</div>
-        {delta_html}
-    </div>
-    """
+    card_html = f"""<div class="metric-card" style="min-height: 130px;"><div class="metric-label"><span class="metric-icon">{icone_html}</span><span>{label}</span></div><div class="metric-value">{valor}</div>{delta_html}</div>"""
     st.markdown(card_html, unsafe_allow_html=True)
 
 def criar_cards_resumo(df):
     faturamento_sem_taxas = df['Total'].sum() - df['Total taxa de serviço'].sum()
     total_taxas = df['Total taxa de serviço'].sum()
     total_geral = df['Total'].sum()
-    
     col1, col2, col3 = st.columns(3)
     with col1:
         criar_card("Faturamento (sem taxas)", formatar_moeda(faturamento_sem_taxas), "<i class='bi bi-cash-coin'></i>")
@@ -63,7 +45,6 @@ def criar_cards_resumo(df):
         criar_card("Faturamento Geral", formatar_moeda(total_geral), "<i class='bi bi-graph-up-arrow'></i>")
 
 def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
-    """Cria os 4 cards de resumo para a aba de Delivery usando o estilo customizado."""
     qtd_entregas = len(df_delivery_filtrado)
     faturamento_delivery = df_delivery_filtrado['Total'].sum()
     ticket_medio_delivery = faturamento_delivery / qtd_entregas if qtd_entregas > 0 else 0
@@ -92,6 +73,7 @@ def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
             icone_html="<i class='bi bi-speedometer2'></i>",
             delta_text=f"{delta_pedidos_percent:.2f}%"
         )
+
 
 def criar_cards_dias_semana(df):
     st.markdown("#### <i class='bi bi-calendar-week'></i> Análise por Dia da Semana", unsafe_allow_html=True)
@@ -145,13 +127,12 @@ def criar_grafico_barras_horarios(df):
     horas_template = pd.DataFrame({'Hora': range(24)})
     hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
     hourly_summary['Ticket_Medio'] = hourly_summary.apply(lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0, axis=1)
-    hover_text = [f"<b>{int(row['Hora'])}h - {int(row['Hora'])+1}h</b><br>Pedidos: {int(row['Num_Pedidos'])}<br>Faturamento: {formatar_moeda(row['Faturamento_Total'])}<br>Ticket Médio: {formatar_moeda(row['Ticket_Medio'])}" for index, row in hourly_summary.iterrows()]
-    fig = go.Figure(go.Bar(x=hourly_summary['Hora'], y=hourly_summary['Num_Pedidos'], text=hourly_summary['Num_Pedidos'].astype(int), textposition='outside', hoverinfo='text', hovertext=hover_text, marker=dict(color=hourly_summary['Num_Pedidos'], colorscale='Blues', showscale=False)))
-    fig.update_layout(template="streamlit", xaxis_title="Hora do Dia", yaxis_title="Número de Pedidos", plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, xaxis=dict(tickmode='array', tickvals=list(range(24)), ticktext=[f'{h}h' for h in range(24)]))
-    st.plotly_chart(fig, use_container_width=True)
+    chart = alt.Chart(hourly_summary).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(x=alt.X('Hora:O', title='Hora do Dia', axis=alt.Axis(labelAngle=0)), y=alt.Y('Num_Pedidos:Q', title='Número de Pedidos'), color=alt.Color('Num_Pedidos:Q', scale=alt.Scale(scheme='blues'), legend=None), tooltip=[alt.Tooltip('Hora:N', title='Hora do Dia'), alt.Tooltip('Num_Pedidos:Q', title='Nº de Pedidos'), alt.Tooltip('Faturamento_Total:Q', title='Faturamento', format='$.2f'), alt.Tooltip('Ticket_Medio:Q', title='Ticket Médio', format='$.2f')]).configure_axis(grid=False).configure_view(strokeWidth=0)
+    st.altair_chart(chart, use_container_width=True)
 
+
+# --- FUNÇÃO ATUALIZADA ---
 def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
-    """Cria os cards para o Top 3 bairros com mais entregas."""
     st.markdown("#### <i class='bi bi-geo-alt-fill'></i> Top Bairros por Nº de Entregas", unsafe_allow_html=True)
 
     if df_delivery_filtrado.empty:
@@ -168,28 +149,48 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
     
     for i, bairro_nome in enumerate(top_bairros):
         with cols[i]:
-            with st.container(border=True):
-                st.markdown(f"<h5 style='text-align: center; height: 40px;'>{i+1}º - {bairro_nome}</h5>", unsafe_allow_html=True)
-                
-                df_bairro_filtrado = df_delivery_filtrado[df_delivery_filtrado['Bairro'] == bairro_nome]
-                df_bairro_total = df_delivery_total[df_delivery_total['Bairro'] == bairro_nome]
-                
-                # Métricas do período
-                pedidos_bairro = len(df_bairro_filtrado)
-                ticket_medio_bairro = df_bairro_filtrado['Total'].mean()
-                total_taxa_entrega = df_bairro_filtrado['Entrega'].sum()
-                
-                # KPI de performance
-                dias_no_filtro = df_bairro_filtrado['Data'].nunique()
-                media_diaria_filtro = pedidos_bairro / dias_no_filtro if dias_no_filtro > 0 else 0
-                
-                dias_no_total = df_bairro_total['Data'].nunique()
-                media_diaria_total = len(df_bairro_total) / dias_no_total if dias_no_total > 0 else 0
-                
-                delta = 0
-                if media_diaria_total > 0:
-                    delta = ((media_diaria_filtro - media_diaria_total) / media_diaria_total) * 100
-                
-                st.metric("Nº de Pedidos", pedidos_bairro, f"{delta:.2f}% vs Média")
-                st.metric("Ticket Médio", formatar_moeda(ticket_medio_bairro))
-                st.metric("Total em Taxas de Entrega", formatar_moeda(total_taxa_entrega))
+            df_bairro_filtrado = df_delivery_filtrado[df_delivery_filtrado['Bairro'] == bairro_nome]
+            df_bairro_total = df_delivery_total[df_delivery_total['Bairro'] == bairro_nome]
+            
+            # Métricas
+            pedidos_bairro = len(df_bairro_filtrado)
+            faturamento_bairro = df_bairro_filtrado['Total'].sum()
+            ticket_medio_bairro = faturamento_bairro / pedidos_bairro if pedidos_bairro > 0 else 0
+            total_taxa_entrega = df_bairro_filtrado['Entrega'].sum()
+            
+            # KPI de performance
+            dias_no_filtro = df_bairro_filtrado['Data'].nunique()
+            media_diaria_filtro = pedidos_bairro / dias_no_filtro if dias_no_filtro > 0 else 0
+            
+            dias_no_total = df_bairro_total['Data'].nunique()
+            media_diaria_total = len(df_bairro_total) / dias_no_total if dias_no_total > 0 else 0
+            
+            delta_percent = 0
+            if media_diaria_total > 0:
+                delta_percent = ((media_diaria_filtro - media_diaria_total) / media_diaria_total) * 100
+            
+            # Monta o delta com seta e cor
+            delta_str = f"{delta_percent:+.2f}%" # O sinal + força a exibição de '+' para valores positivos
+            if delta_str.startswith('-'):
+                delta_class = "metric-delta-negative"
+                seta = "▼"
+            else:
+                delta_class = "metric-delta-positive"
+                seta = "▲"
+            
+            delta_html = f"<div class='metric-delta {delta_class}'>{seta} {delta_str.replace('+', '')} vs Média</div>"
+
+            # Constrói o card com HTML
+            card_html = textwrap.dedent(f"""
+                <div class="metric-card" style="min-height: 230px;">
+                    <p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p>
+                    <p class="metric-value">{pedidos_bairro}</p>
+                    <p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p>
+                    {delta_html}
+                    <hr class="metric-divider">
+                    <p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p>
+                    <p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p>
+                    <p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p>
+                </div>
+            """)
+            st.markdown(card_html, unsafe_allow_html=True)
