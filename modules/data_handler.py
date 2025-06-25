@@ -46,23 +46,19 @@ def tratar_dados_saipos(df_bruto):
 
     for temp_df in [df_validos, df_cancelados]:
         if not temp_df.empty and 'Data da venda' in temp_df.columns:
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Adicionado dayfirst=True para garantir a leitura correta do formato DD/MM/AAAA
             temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], dayfirst=True, errors='coerce')
-            
             temp_df.dropna(subset=['Data da venda'], inplace=True)
             
-            # Padroniza o fuso horário
+            # --- CORREÇÃO DE FUSO HORÁRIO APLICADA AQUI ---
             if temp_df['Data da venda'].dt.tz is None:
-                temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_localize('UTC').dt.tz_convert(fuso_horario)
+                # CORREÇÃO: Aplica o fuso horário local diretamente, sem converter de UTC.
+                # Isso assume que as horas no relatório já estão no horário de Aracaju.
+                temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_localize(fuso_horario)
             else:
+                # Se por algum motivo já tiver um fuso, apenas garante que está no fuso correto.
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_convert(fuso_horario)
 
     if not df_validos.empty:
-        # Removido o filtro de datas futuras para garantir que todos os dados do relatório sejam processados.
-        # hoje = datetime.now(fuso_horario)
-        # df_validos = df_validos[df_validos['Data da venda'] <= hoje].copy()
-        
         df_validos['Data'] = df_validos['Data da venda'].dt.date
         df_validos['Hora'] = df_validos['Data da venda'].dt.hour
         df_validos['Ano'] = df_validos['Data da venda'].dt.year
@@ -130,8 +126,6 @@ def _atualizar_aba(spreadsheet, index, nome_aba, df_novos):
         # Combina os dataframes e remove as duplicatas completas
         df_combinado = pd.concat([df_existente, df_novos_str]).drop_duplicates(keep=False)
         
-        # Filtra o df_combinado para manter apenas as linhas que estão no df_novos (as verdadeiramente novas)
-        # Usamos o 'Pedido' como chave primária para garantir a correspondência correta
         df_para_adicionar = df_novos_str[df_novos_str['Pedido'].isin(df_combinado['Pedido'])]
 
         if not df_para_adicionar.empty:
