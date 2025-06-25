@@ -107,49 +107,40 @@ def criar_grafico_tendencia(df):
     fig.update_layout(template="streamlit", showlegend=False, yaxis_title="Faturamento (R$)", xaxis_title="Data", margin=dict(l=20, r=20, t=20, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
     st.plotly_chart(fig, use_container_width=True)
 
+
 def criar_grafico_barras_horarios(df):
-    """Cria um gráfico de barras com o número de pedidos por hora, com gradiente e hover interativo."""
+    """
+    Plano de contingência: Exibe os dados de performance por hora em uma tabela, 
+    já que o gráfico de barras está apresentando um erro de incompatibilidade.
+    """
     st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora", unsafe_allow_html=True)
     if df.empty:
-        st.info("Não há dados para exibir no gráfico de performance por hora.")
+        st.info("Não há dados para exibir na performance por hora.")
         return
 
-    hourly_summary = df.groupby('Hora').agg(Num_Pedidos=('Pedido', 'count'), Faturamento_Total=('Total', 'sum')).reset_index()
+    # Agrega os dados por hora
+    hourly_summary = df.groupby('Hora').agg(
+        Num_Pedidos=('Pedido', 'count'),
+        Faturamento_Total=('Total', 'sum')
+    ).reset_index()
+
+    # Garante que todas as horas do dia (0-23) estejam presentes
     horas_template = pd.DataFrame({'Hora': range(24)})
     hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
-    hourly_summary['Ticket_Medio'] = hourly_summary.apply(lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0, axis=1)
     
-    # --- ABORDAGEM SIMPLIFICADA E SEGURA ---
-    hover_text = []
-    for index, row in hourly_summary.iterrows():
-        hora_str = f"<b>{int(row['Hora'])}h - {int(row['Hora'])+1}h</b>"
-        pedidos_str = f"Pedidos: {int(row['Num_Pedidos'])}"
-        faturamento_str = f"Faturamento: {formatar_moeda(row['Faturamento_Total'])}"
-        ticket_str = f"Ticket Médio: {formatar_moeda(row['Ticket_Medio'])}"
-        hover_text.append(f"{hora_str}<br>{pedidos_str}<br>{faturamento_str}<br>{ticket_str}")
+    # Calcula o Ticket Médio
+    hourly_summary['Ticket_Medio'] = hourly_summary.apply(
+        lambda row: row['Faturamento_Total'] / row['Num_Pedidos'] if row['Num_Pedidos'] > 0 else 0,
+        axis=1
+    ).astype(float)
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=hourly_summary['Hora'],
-        y=hourly_summary['Num_Pedidos'],
-        text=hourly_summary['Num_Pedidos'].astype(int),
-        textposition='outside',
-        hoverinfo='text',
-        hovertext=hover_text,
-        marker=dict(
-            color=hourly_summary['Num_Pedidos'], # Define a cor baseada no número de pedidos
-            colorscale='Blues', # Define a escala de cores para o gradiente
-            showscale=False # Opcional: esconde a barra de escala de cor
-        )
-    ))
+    # Ordena pela hora
+    hourly_summary = hourly_summary.sort_values(by='Hora').reset_index(drop=True)
 
-    fig.update_layout(
-        template="streamlit",
-        xaxis_title="Hora do Dia",
-        yaxis_title="Número de Pedidos",
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=350,
-        xaxis=dict(tickmode='array', tickvals=list(range(24)), ticktext=[f'{h}h' for h in range(24)])
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # Formata as colunas para melhor visualização na tabela
+    hourly_summary_display = hourly_summary.copy()
+    hourly_summary_display['Faturamento_Total'] = hourly_summary_display['Faturamento_Total'].apply(formatar_moeda)
+    hourly_summary_display['Ticket_Medio'] = hourly_summary_display['Ticket_Medio'].apply(formatar_moeda)
+    hourly_summary_display['Num_Pedidos'] = hourly_summary_display['Num_Pedidos'].astype(int)
+
+    st.dataframe(hourly_summary_display, use_container_width=True, hide_index=True)
