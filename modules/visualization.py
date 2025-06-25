@@ -175,6 +175,7 @@ def criar_cards_cancelamento_resumo(df_cancelados, df_validos):
     total_pedidos = num_validos + num_cancelados
     valor_perdido = pd.to_numeric(df_cancelados['Total'], errors='coerce').sum()
     taxa_cancelamento = (num_cancelados / total_pedidos) * 100 if total_pedidos > 0 else 0
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Pedidos Cancelados", num_cancelados)
@@ -193,26 +194,45 @@ def criar_grafico_motivos_cancelamento(df_cancelados):
     chart = alt.Chart(motivos).mark_bar().encode(y=alt.Y('Motivo:N', title='Motivo', sort='-x'), x=alt.X('Contagem:Q', title='Número de Ocorrências'), tooltip=['Motivo', 'Contagem']).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
 
-# --- FUNÇÕES ADICIONAIS PARA CANCELADOS ---
+# --- NOVAS FUNÇÕES PARA A ABA DE CANCELADOS (PARTE 2) ---
 
 def criar_grafico_cancelamentos_por_hora(df_cancelados):
+    """Cria um gráfico de barras com o número de cancelamentos por hora."""
     st.markdown("##### <i class='bi bi-clock'></i> Cancelamentos por Hora", unsafe_allow_html=True)
     if df_cancelados.empty:
         st.info("Não há cancelamentos para analisar por hora.")
         return
+
+    # Converte a coluna 'Hora' para numérico, caso ainda não seja
     df_cancelados['Hora'] = pd.to_numeric(df_cancelados['Hora'], errors='coerce')
+    
     hourly_cancel = df_cancelados.groupby('Hora').size().reset_index(name='Contagem')
     horas_template = pd.DataFrame({'Hora': range(24)})
     hourly_cancel = pd.merge(horas_template, hourly_cancel, on='Hora', how='left').fillna(0)
-    chart = alt.Chart(hourly_cancel).mark_bar(color="#CD5C5C").encode(x=alt.X('Hora:O', title='Hora do Dia'), y=alt.Y('Contagem:Q', title='Nº de Cancelamentos'), tooltip=['Hora', 'Contagem']).properties(height=300)
+
+    chart = alt.Chart(hourly_cancel).mark_bar(
+        color="#CD5C5C" # Vermelho suave
+    ).encode(
+        x=alt.X('Hora:O', title='Hora do Dia'),
+        y=alt.Y('Contagem:Q', title='Nº de Cancelamentos'),
+        tooltip=['Hora', 'Contagem']
+    ).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
 
+
 def criar_donut_cancelamentos_por_canal(df_cancelados):
+    """Cria um gráfico de rosca (donut) com os cancelamentos por canal de venda."""
     st.markdown("##### <i class='bi bi-pie-chart-fill'></i> Divisão por Canal de Venda", unsafe_allow_html=True)
     if df_cancelados.empty or 'Canal de venda' not in df_cancelados.columns:
         st.info("Não há dados de cancelamento por canal para exibir.")
         return
+        
     canal_counts = df_cancelados['Canal de venda'].value_counts().reset_index()
     canal_counts.columns = ['Canal', 'Contagem']
-    chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(theta=alt.Theta(field="Contagem", type="quantitative"), color=alt.Color(field="Canal", type="nominal", title="Canal"), tooltip=['Canal', 'Contagem']).properties(height=300)
+
+    chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(
+        theta=alt.Theta(field="Contagem", type="quantitative"),
+        color=alt.Color(field="Canal", type="nominal", title="Canal"),
+        tooltip=['Canal', 'Contagem']
+    ).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
