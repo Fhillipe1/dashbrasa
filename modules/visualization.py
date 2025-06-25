@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import textwrap
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -14,25 +15,34 @@ def formatar_moeda(valor):
     if valor is None: return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
+def criar_card(label, valor, icone):
+    card_html = f"""
+    <div class="metric-card" style="height: 130px;">
+        <div class="metric-label">
+            <span class="metric-icon">{icone}</span>
+            <span>{label}</span>
+        </div>
+        <div class="metric-value">{valor}</div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
 def criar_cards_resumo(df):
-    """Cria os 3 cards principais de resumo usando st.metric."""
     faturamento_sem_taxas = df['Total'].sum() - df['Total taxa de serviço'].sum()
     total_taxas = df['Total taxa de serviço'].sum()
     total_geral = df['Total'].sum()
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="💰 Faturamento (sem taxas)", value=formatar_moeda(faturamento_sem_taxas))
+        criar_card("Faturamento (sem taxas)", formatar_moeda(faturamento_sem_taxas), "💰")
     with col2:
-        st.metric(label="🧾 Total em Taxas", value=formatar_moeda(total_taxas))
+        criar_card("Total em Taxas", formatar_moeda(total_taxas), "🧾")
     with col3:
-        st.metric(label="📈 Faturamento Geral", value=formatar_moeda(total_geral))
+        criar_card("Faturamento Geral", formatar_moeda(total_geral), "📈")
 
 
 def criar_cards_dias_semana(df):
-    """Cria 7 cards para os dias da semana usando st.container e st.metric."""
-    st.markdown("#### <i class='bi bi-calendar-week'></i> Análise por Dia da Semana", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("#### :icon[calendar-week] Análise por Dia da Semana")
 
     dias_semana = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
     
@@ -40,36 +50,52 @@ def criar_cards_dias_semana(df):
 
     for i, dia in enumerate(dias_semana):
         with cols[i]:
-            with st.container(border=True): # Usando o container nativo do Streamlit
-                nome_dia_semana = dia.split('. ')[1]
-                st.markdown(f"<h6 style='text-align: center;'>{nome_dia_semana}</h6>", unsafe_allow_html=True)
+            df_dia = df[df['Dia da Semana'] == dia]
+            nome_dia_semana = dia.split('. ')[1]
+
+            if df_dia.empty:
+                card_html = f"""
+                <div class="metric-card" style="height: 230px;">
+                    <div class="metric-label" style="font-size: 1.1rem; justify-content: center;">{nome_dia_semana}</div>
+                    <div class='metric-value' style='font-size: 1rem; color: #555; margin-top: 1rem;'>Sem dados</div>
+                </div>
+                """
+            else:
+                total_vendas_dia = df_dia['Total'].sum()
+                num_pedidos_dia = len(df_dia)
+                ticket_medio = total_vendas_dia / num_pedidos_dia if num_pedidos_dia > 0 else 0
                 
-                df_dia = df[df['Dia da Semana'] == dia]
-
-                if df_dia.empty:
-                    st.markdown("<p style='text-align: center; font-size: 0.9rem;'>Sem dados</p>", unsafe_allow_html=True)
+                horario_pico = df_dia['Hora'].mode()
+                if not horario_pico.empty:
+                    horario_pico_val = int(horario_pico.iloc[0])
+                    horario_pico_str = f"{horario_pico_val}h - {horario_pico_val+1}h"
+                    df_horario_pico = df_dia[df_dia['Hora'] == horario_pico_val]
+                    valor_medio_pico = df_horario_pico['Total'].mean() if not df_horario_pico.empty else 0
                 else:
-                    total_vendas_dia = df_dia['Total'].sum()
-                    num_pedidos_dia = len(df_dia)
-                    ticket_medio = total_vendas_dia / num_pedidos_dia if num_pedidos_dia > 0 else 0
-                    
-                    horario_pico = df_dia['Hora'].mode()
-                    if not horario_pico.empty:
-                        horario_pico_val = int(horario_pico.iloc[0])
-                        horario_pico_str = f"{horario_pico_val}h"
-                    else:
-                        horario_pico_str = "N/A"
+                    horario_pico_str = "N/A"
+                    valor_medio_pico = 0
 
-                    num_dias_unicos = df_dia['Data'].nunique()
-                    media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
+                num_dias_unicos = df_dia['Data'].nunique()
+                media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
+                
+                # CORREÇÃO: Usando textwrap.dedent e construindo o HTML em uma única string
+                card_html = textwrap.dedent(f"""
+                    <div class="metric-card" style="height: 230px;">
+                        <p class="metric-label" style="font-size: 1.1rem;">{nome_dia_semana}</p>
+                        <p class="metric-value">{formatar_moeda(ticket_medio)}</p>
+                        <p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Ticket Médio</p>
+                        <hr class="metric-divider">
+                        <p class="secondary-metric">Pedidos/Dia: <b>{media_pedidos_dia:.1f}</b></p>
+                        <p class="secondary-metric">Horário Pico: <b>{horario_pico_str}</b></p>
+                        <p class="secondary-metric">Média Pico: <b>{formatar_moeda(valor_medio_pico)}</b></p>
+                    </div>
+                """)
+            
+            st.markdown(card_html, unsafe_allow_html=True)
 
-                    st.metric(label="Ticket Médio", value=formatar_moeda(ticket_medio))
-                    st.metric(label="Média Pedidos/Dia", value=f"{media_pedidos_dia:.1f}")
-                    st.metric(label="Horário de Pico", value=horario_pico_str)
 
 def criar_grafico_tendencia(df):
-    """Cria um gráfico de linha com Plotly."""
-    st.markdown("#### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
+    st.markdown("#### :icon[graph-up] Tendência do Faturamento Diário")
 
     if df.empty:
         st.info("Não há dados para o período selecionado.")
