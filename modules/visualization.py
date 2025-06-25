@@ -142,3 +142,35 @@ def criar_grafico_barras_horarios(df):
     )
 
     st.altair_chart(chart, use_container_width=True)
+
+
+# --- NOVA FUNÇÃO PARA A ABA DELIVERY ---
+def criar_cards_delivery_resumo(df_delivery_filtrado, df_delivery_total):
+    """Cria os 4 cards de resumo para a aba de Delivery."""
+    
+    # Cálculos com base no período filtrado
+    qtd_entregas = len(df_delivery_filtrado)
+    faturamento_delivery = df_delivery_filtrado['Total'].sum()
+    ticket_medio_delivery = faturamento_delivery / qtd_entregas if qtd_entregas > 0 else 0
+    
+    # Cálculo para o KPI de performance
+    # Média diária no período filtrado
+    dias_no_filtro = df_delivery_filtrado['Data'].nunique()
+    media_pedidos_diaria_filtro = qtd_entregas / dias_no_filtro if dias_no_filtro > 0 else 0
+    
+    # Média diária histórica
+    dias_no_total = df_delivery_total['Data'].nunique()
+    media_pedidos_diaria_total = len(df_delivery_total) / dias_no_total if dias_no_total > 0 else 0
+    
+    # Cálculo do delta (variação percentual)
+    delta_pedidos = ((media_pedidos_diaria_filtro - media_pedidos_diaria_total) / media_pedidos_diaria_total) * 100 if media_pedidos_diaria_total > 0 else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total de Entregas", qtd_entregas)
+    with col2:
+        st.metric("Faturamento Delivery", formatar_moeda(faturamento_delivery))
+    with col3:
+        st.metric("Ticket Médio Delivery", formatar_moeda(ticket_medio_delivery))
+    with col4:
+        st.metric("Performance Pedidos/Dia", f"{media_pedidos_diaria_filtro:.1f}", f"{delta_pedidos:.2f}% vs Média Geral")
