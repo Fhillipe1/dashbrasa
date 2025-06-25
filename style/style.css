@@ -5,49 +5,48 @@ div[data-testid="stAppViewContainer"] {
 
 /* Estilo para o container dos filtros */
 div[data-testid="stExpander"] {
-    background-color: #1c1c1e;
+    background-color: #262730;
     border: 1px solid #444;
     border-radius: 10px;
+}
+div[data-testid="stExpander"] summary {
+    font-size: 1.1rem;
+    color: #FAFAFA;
 }
 
 /* Estilo para os cards de métricas */
 div[data-testid="stMetric"] {
-    background-color: #262730; /* Fundo cinza escuro */
+    background-color: #262730;
     border: 1px solid #444;
     border-radius: 10px;
-    padding: 20px;
+    padding: 10px; /* Reduzido para dar mais espaço */
     margin: 5px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.4);
-    transition: box-shadow 0.3s ease-in-out; /* Adiciona transição suave */
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 /* Efeito de brilho ao passar o mouse */
 div[data-testid="stMetric"]:hover {
-    box-shadow: 0 0 15px rgba(200, 200, 200, 0.6); /* Brilho prata/branco */
+    box-shadow: 0 0 15px rgba(200, 200, 200, 0.6);
 }
 
-/* Centraliza o conteúdo dos cards de dias da semana */
+/* Centraliza o conteúdo dos cards */
 div[data-testid="stMetric"] > div {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
-/* Ajusta a cor e tamanho da label (título) e do valor nos cards */
+/* --- AJUSTE DE FONTE NOS CARDS --- */
 div[data-testid="stMetric"] label {
-    font-size: 0.95rem !important;
+    font-size: 0.85rem !important; /* Fonte menor para a label */
     font-weight: 600;
-    color: #FAFAFA; /* Texto branco/claro */
+    color: #afb8c1; /* Cor mais suave para a label */
     text-align: center;
 }
 
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-    font-size: 1.6rem !important;
+    font-size: 1.3rem !important; /* Fonte menor para o valor */
     font-weight: 700;
-    color: #FAFAFA; /* Texto branco/claro */
-}
-
-/* Força a cor do texto do streamlit a ser branca (para o título do expander de filtro) */
-.st-emotion-cache-1wmy9hl e1f1d6gn0 {
     color: #FAFAFA;
 }
