@@ -49,13 +49,9 @@ def tratar_dados_saipos(df_bruto):
             temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], dayfirst=True, errors='coerce')
             temp_df.dropna(subset=['Data da venda'], inplace=True)
             
-            # --- CORREÇÃO DE FUSO HORÁRIO APLICADA AQUI ---
             if temp_df['Data da venda'].dt.tz is None:
-                # CORREÇÃO: Aplica o fuso horário local diretamente, sem converter de UTC.
-                # Isso assume que as horas no relatório já estão no horário de Aracaju.
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_localize(fuso_horario)
             else:
-                # Se por algum motivo já tiver um fuso, apenas garante que está no fuso correto.
                 temp_df['Data da venda'] = temp_df['Data da venda'].dt.tz_convert(fuso_horario)
 
     if not df_validos.empty:
@@ -76,11 +72,15 @@ def tratar_dados_saipos(df_bruto):
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
 
+    # --- CORREÇÃO FINAL PARA FORMATO DE TEXTO ---
+    # Converte as colunas de data/hora para texto no formato desejado antes de salvar.
     for temp_df in [df_validos, df_cancelados]:
-        for col in temp_df.select_dtypes(include=['datetime64[ns, UTC]', 'datetime64[ns, America/Maceio]', 'datetime64[ns]']).columns:
-             temp_df[col] = temp_df[col].astype(str)
+        if 'Data da venda' in temp_df.columns:
+            # Converte 'Data da venda' para o formato 'AAAA-MM-DD HH:MM:SS'
+            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda']).dt.strftime('%Y-%m-%d %H:%M:%S')
         if 'Data' in temp_df.columns:
-             temp_df['Data'] = temp_df['Data'].astype(str)
+             # Garante que a coluna 'Data' seja apenas 'AAAA-MM-DD'
+            temp_df['Data'] = pd.to_datetime(temp_df['Data']).dt.strftime('%Y-%m-%d')
 
     return df_validos, df_cancelados
 
@@ -99,6 +99,7 @@ def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
     try:
         spreadsheet = gc.open(sheet_name)
         _atualizar_aba(spreadsheet, 0, "Página1", df_novos_validos)
+        # Assumindo que a segunda aba se chamará "Cancelados"
         _atualizar_aba(spreadsheet, 1, "Cancelados", df_novos_cancelados)
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar os dados para o Google Sheets: {e}")
@@ -109,27 +110,37 @@ def _atualizar_aba(spreadsheet, index, nome_aba, df_novos):
         worksheet = spreadsheet.worksheet(nome_aba)
     except gspread.WorksheetNotFound:
         st.write(f"Aba '{nome_aba}' não encontrada. Criando uma nova...")
-        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="100", cols="30")
+        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="100", cols="40") # Aumentando o número de colunas por segurança
     
     st.write(f"Lendo dados existentes da aba '{nome_aba}'...")
     df_existente = get_as_dataframe(worksheet, evaluate_formulas=False)
     
+    # Padroniza tudo para string para uma comparação segura de duplicatas
     if not df_existente.empty:
       df_existente = df_existente.astype(str)
     
-    df_novos_str = df_novos.astype(str)
+    df_novos = df_novos.astype(str)
 
     if df_existente.empty:
-        st.write(f"Aba '{nome_aba}' vazia. Adicionando {len(df_novos_str)} novas linhas.")
-        set_with_dataframe(worksheet, df_novos_str, include_index=False, resize=True)
+        st.write(f"Aba '{nome_aba}' vazia. Adicionando {len(df_novos)} novas linhas.")
+        set_with_dataframe(worksheet, df_novos, include_index=False, resize=True)
     else:
-        # Combina os dataframes e remove as duplicatas completas
-        df_combinado = pd.concat([df_existente, df_novos_str]).drop_duplicates(keep=False)
-        
-        df_para_adicionar = df_novos_str[df_novos_str['Pedido'].isin(df_combinado['Pedido'])]
+        # Garante que as colunas de ambos os dataframes sejam as mesmas para a concatenação
+        colunas_comuns = list(set(df_existente.columns) & set(df_novos.columns))
+        df_existente_comum = df_existente[colunas_comuns]
+        df_novos_comum = df_novos[colunas_comuns]
 
-        if not df_para_adicionar.empty:
-            st.write(f"Adicionando {len(df_para_adicionar)} novas linhas à aba '{nome_aba}'...")
-            worksheet.append_rows(df_para_adicionar.values.tolist(), value_input_option='USER_ENTERED')
+        # Combina os dataframes e remove as duplicatas completas
+        df_combinado = pd.concat([df_existente_comum, df_novos_comum]).drop_duplicates(keep=False)
+        
+        # As linhas restantes no df_combinado são as verdadeiramente novas
+        if not df_combinado.empty:
+            # Filtra o df_novos original para garantir que estamos adicionando apenas as linhas que devem ser novas
+            df_para_adicionar = df_novos[df_novos['Pedido'].isin(df_combinado['Pedido'])]
+            if not df_para_adicionar.empty:
+                st.write(f"Adicionando {len(df_para_adicionar)} novas linhas à aba '{nome_aba}'...")
+                worksheet.append_rows(df_para_adicionar.values.tolist(), value_input_option='USER_ENTERED')
+            else:
+                 st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'. A planilha já está atualizada.")
         else:
             st.write(f"Nenhuma linha nova para adicionar em '{nome_aba}'. A planilha já está atualizada.")
