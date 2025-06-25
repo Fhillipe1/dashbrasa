@@ -6,10 +6,7 @@ import textwrap
 import altair as alt
 import os
 
-# Bibliotecas para o novo mapa
-import folium
-from folium.plugins import HeatMap
-from streamlit_folium import st_folium
+# Removidas as importações de folium e pydeck que não são mais necessárias
 
 def aplicar_css_local(caminho_arquivo):
     try:
@@ -155,9 +152,10 @@ def criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total):
             card_html = textwrap.dedent(f"""<div class="metric-card" style="min-height: 230px;"><p class="metric-label" style="font-size: 1.1rem;">{i+1}º - {bairro_nome}</p><p class="metric-value">{pedidos_bairro}</p><p class="metric-label" style="font-size: 0.8rem; margin-bottom: 8px;">Nº de Pedidos</p>{delta_html}<hr class="metric-divider"><p class="secondary-metric">Faturamento: <b>{formatar_moeda(faturamento_bairro)}</b></p><p class="secondary-metric">Ticket Médio: <b>{formatar_moeda(ticket_medio_bairro)}</b></p><p class="secondary-metric">Total Taxas: <b>{formatar_moeda(total_taxa_entrega)}</b></p></div>""")
             st.markdown(card_html, unsafe_allow_html=True)
 
-# --- FUNÇÃO DO MAPA TOTALMENTE REESCRITA COM FOLIUM ---
+# --- FUNÇÃO DE MAPA REESCRITA COM st.map ---
 def criar_mapa_de_calor(df_delivery, df_cache_cep):
-    st.markdown("#### <i class='bi bi-map-fill'></i> Mapa de Calor das Entregas", unsafe_allow_html=True)
+    """Cria e exibe um mapa de pontos das entregas usando st.map."""
+    st.markdown("#### <i class='bi bi-map-fill'></i> Concentração de Entregas", unsafe_allow_html=True)
     
     if df_cache_cep.empty:
         st.warning("O arquivo de cache de CEPs está vazio. Atualize os relatórios para gerá-lo.")
@@ -173,21 +171,9 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
         st.warning("Não foi possível gerar o mapa. Nenhum CEP dos pedidos foi encontrado no cache de coordenadas.")
         return
 
-    df_mapa['lat'] = pd.to_numeric(df_mapa['lat'])
-    df_mapa['lon'] = pd.to_numeric(df_mapa['lon'])
+    # Prepara o dataframe para o st.map, que precisa das colunas 'lat' e 'lon'
+    df_mapa_final = df_mapa[['lat', 'lon']].copy()
+    df_mapa_final['lat'] = pd.to_numeric(df_mapa_final['lat'])
+    df_mapa_final['lon'] = pd.to_numeric(df_mapa_final['lon'])
 
-    # Centraliza o mapa
-    center_lat = float(df_mapa['lat'].mean())
-    center_lon = float(df_mapa['lon'].mean())
-
-    # Cria o mapa base com Folium
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=12, tiles="CartoDB dark_matter")
-
-    # Prepara os dados para a camada de calor
-    heat_data = [[row['lat'], row['lon']] for index, row in df_mapa.iterrows()]
-
-    # Adiciona a camada de calor ao mapa
-    HeatMap(heat_data, radius=15).add_to(m)
-
-    # Exibe o mapa no Streamlit
-    st_folium(m, use_container_width=True, height=450)
+    st.map(df_mapa_final, zoom=11)
