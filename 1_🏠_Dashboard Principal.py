@@ -11,14 +11,17 @@ LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.pn
 st.set_page_config(layout="wide", page_title="Dashboard de Vendas La Brasa", page_icon=LOGO_URL)
 visualization.aplicar_css_local("style/style.css")
 
+
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
 
-# --- FUNÇÕES DE CARREGAMENTO DE DADOS ---
+# --- CARREGAMENTO DOS DADOS ---
 @st.cache_data(ttl=300)
 def carregar_dados():
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
+    
+    # Tratamento para df_validos
     if not df_validos.empty:
         cols_numericas = ['Itens', 'Total taxa de serviço', 'Total', 'Entrega', 'Acréscimo', 'Desconto', 'Hora', 'Ano', 'Mês']
         for col in cols_numericas:
@@ -26,13 +29,19 @@ def carregar_dados():
                 df_validos[col] = pd.to_numeric(df_validos[col], errors='coerce').fillna(0)
         if 'Data' in df_validos.columns:
             df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
+            
+    # Tratamento para df_cancelados
+    if not df_cancelados.empty:
+        if 'Data da venda' in df_cancelados.columns:
+             df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
+
     return df_validos, df_cancelados
 
 @st.cache_data(ttl=600)
 def carregar_cache_cep():
     cache_path = 'data/cep_cache.csv'
     if os.path.exists(cache_path):
-        return pd.read_csv(cache_path, dtype={'cep': str, 'lat': str, 'lon': str})
+        return pd.read_csv(cache_path, dtype={'cep': str})
     return pd.DataFrame(columns=['cep', 'lat', 'lon'])
 
 df_validos, df_cancelados = carregar_dados()
@@ -45,6 +54,7 @@ with col_logo:
 with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
+
 
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
@@ -65,9 +75,16 @@ if not df_validos.empty:
         (df_validos['Data'] <= data_final) &
         (df_validos['Canal de venda'].isin(canais_selecionados))
     ]
+    
+    # Filtra também os cancelados pelo mesmo período de data
+    df_cancelados_filtrado = df_cancelados[
+        (df_cancelados['Data'] >= data_inicial) &
+        (df_cancelados['Data'] <= data_final)
+    ]
+
 
     # --- ESTRUTURA DE ABAS ---
-    tab_resumo, tab_delivery, tab_cancelados = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
+    tab_resumo, tab_delivery, tab_cancelados_aba = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
         st.markdown("### <i class='bi bi-bar-chart-line-fill'></i> Visão Geral do Período Filtrado", unsafe_allow_html=True)
@@ -83,10 +100,8 @@ if not df_validos.empty:
 
     with tab_delivery:
         st.markdown("### <i class='bi bi-bicycle'></i> Análise de Entregas", unsafe_allow_html=True)
-        
         df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
         df_delivery_total = df_validos[df_validos['Tipo de Canal'] == 'Delivery']
-
         if df_delivery_filtrado.empty:
             st.info("Nenhum pedido de delivery encontrado para o período e filtros selecionados.")
         else:
@@ -94,17 +109,16 @@ if not df_validos.empty:
             st.markdown("---")
             visualization.criar_top_bairros_delivery(df_delivery_filtrado, df_delivery_total)
             st.markdown("---")
-            # Adicionando o mapa de calor
             visualization.criar_mapa_de_calor(df_delivery_filtrado, df_cache_cep)
 
-    with tab_cancelados:
+    with tab_cancelados_aba:
         st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
-        if not df_cancelados.empty and 'Data da venda' in df_cancelados.columns:
-            df_cancelados['Data'] = pd.to_datetime(df_cancelados['Data da venda']).dt.date
-            df_cancelados_filtrado = df_cancelados[(df_cancelados['Data'] >= data_inicial) & (df_cancelados['Data'] <= data_final)]
-            st.write(f"Encontrados {len(df_cancelados_filtrado)} pedidos cancelados no período.")
-            st.dataframe(df_cancelados_filtrado)
+        if df_cancelados_filtrado.empty:
+            st.info("Nenhum pedido cancelado encontrado para o período selecionado.")
         else:
-            st.write("Nenhum pedido cancelado para exibir.")
+            # Chama as novas funções de visualização para cancelados
+            visualization.criar_cards_cancelamento_resumo(df_cancelados_filtrado, df_filtrado)
+            st.markdown("---")
+            visualization.criar_grafico_motivos_cancelamento(df_cancelados_filtrado)
 else:
     st.error("Não foi possível carregar os dados. Verifique a página 'Atualizar Relatório' ou a sua Planilha Google.")
