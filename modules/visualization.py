@@ -96,7 +96,7 @@ def criar_cards_dias_semana(df):
 def criar_grafico_tendencia(df):
     st.markdown("##### <i class='bi bi-graph-up'></i> Tendência do Faturamento Diário", unsafe_allow_html=True)
     if df.empty or len(df.groupby('Data')) < 2:
-        st.info("É necessário ter pelo menos dois dias de dados para mostrar uma tendência.")
+        st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
         return
     daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index().sort_values(by='Data')
     daily_revenue['diff'] = daily_revenue['Total'].diff()
@@ -167,81 +167,52 @@ def criar_mapa_de_calor(df_delivery, df_cache_cep):
     df_mapa_final['lon'] = pd.to_numeric(df_mapa_final['lon'])
     st.map(df_mapa_final, zoom=11)
 
-# --- NOVAS FUNÇÕES PARA O RESUMO GERAL ---
+# --- FUNÇÕES PARA A ABA DE CANCELADOS ---
 
-def criar_donut_e_resumo_canais(df):
-    st.markdown("##### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1, 1])
-
+def criar_cards_cancelamento_resumo(df_cancelados, df_validos):
+    num_cancelados = len(df_cancelados)
+    num_validos = len(df_validos)
+    total_pedidos = num_validos + num_cancelados
+    valor_perdido = pd.to_numeric(df_cancelados['Total'], errors='coerce').sum()
+    taxa_cancelamento = (num_cancelados / total_pedidos) * 100 if total_pedidos > 0 else 0
+    col1, col2, col3 = st.columns(3)
     with col1:
-        # Preparação dos dados para o gráfico
-        df_canal = df.groupby('Canal de venda').agg(
-            Faturamento=('Total', 'sum'),
-            Pedidos=('Pedido', 'count')
-        ).reset_index()
-
-        df_canal['Ticket Medio'] = df_canal['Faturamento'] / df_canal['Pedidos']
-
-        # Gráfico de Rosca
-        chart = alt.Chart(df_canal).mark_arc(innerRadius=80, outerRadius=120).encode(
-            theta=alt.Theta(field="Faturamento", type="quantitative", stack=True),
-            color=alt.Color(field="Canal de venda", type="nominal", legend=alt.Legend(title="Canais de Venda")),
-            tooltip=[
-                alt.Tooltip('Canal de venda', title='Canal'),
-                alt.Tooltip('Faturamento', title='Faturamento', format='$,.2f'),
-                alt.Tooltip('Pedidos', title='Nº de Pedidos'),
-                alt.Tooltip('Ticket Medio', title='Ticket Médio', format='$,.2f')
-            ]
-        )
-        st.altair_chart(chart, use_container_width=True)
-
+        st.metric("Pedidos Cancelados", num_cancelados)
     with col2:
-        # Texto de resumo
-        st.markdown("###### Insights sobre os Canais")
-        ticket_medio_geral = df['Total'].sum() / len(df)
-        
-        for index, row in df_canal.iterrows():
-            canal = row['Canal de venda']
-            tm_canal = row['Ticket Medio']
-            
-            comparativo = "acima" if tm_canal > ticket_medio_geral else "abaixo"
-            cor = "green" if comparativo == "acima" else "red"
-            
-            st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**, que está <span style='color:{cor};'>{comparativo}</span> da média geral ({formatar_moeda(ticket_medio_geral)}).", unsafe_allow_html=True)
+        st.metric("Valor Perdido", formatar_moeda(valor_perdido))
+    with col3:
+        st.metric("Taxa de Cancelamento", f"{taxa_cancelamento:.2f}%")
 
-def criar_boxplot_e_analise_outliers(df):
-    st.markdown("##### <i class='bi bi-box-seam'></i> Análise de Dispersão de Valores", unsafe_allow_html=True)
+def criar_grafico_motivos_cancelamento(df_cancelados):
+    st.markdown("##### <i class='bi bi-question-circle'></i> Principais Motivos de Cancelamento", unsafe_allow_html=True)
+    if df_cancelados.empty or 'Motivo de cancelamento' not in df_cancelados.columns:
+        st.info("Não há dados de motivos de cancelamento para exibir.")
+        return
+    motivos = df_cancelados['Motivo de cancelamento'].value_counts().reset_index()
+    motivos.columns = ['Motivo', 'Contagem']
+    chart = alt.Chart(motivos).mark_bar().encode(y=alt.Y('Motivo:N', title='Motivo', sort='-x'), x=alt.X('Contagem:Q', title='Número de Ocorrências'), tooltip=['Motivo', 'Contagem']).properties(height=300)
+    st.altair_chart(chart, use_container_width=True)
 
-    col1, col2 = st.columns([1, 1])
+# --- FUNÇÕES ADICIONAIS PARA CANCELADOS ---
 
-    with col1:
-        # Gráfico de Boxplot
-        chart = alt.Chart(df).mark_boxplot(extent='min-max').encode(
-            x=alt.X('Dia da Semana:N', title='Dia da Semana', sort=['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']),
-            y=alt.Y('Total:Q', title='Valor do Pedido (R$)'),
-            tooltip=[
-                alt.Tooltip('Dia da Semana:N', title='Dia'),
-                alt.Tooltip('Total:Q', title='Valor do Pedido', format='$,.2f')
-            ]
-        )
-        st.altair_chart(chart, use_container_width=True)
-    
-    with col2:
-        # Análise de Outliers
-        st.markdown("###### O que este gráfico significa?")
-        st.markdown("O **boxplot** mostra a distribuição dos valores dos pedidos. A 'caixa' representa onde se concentra 50% dos seus pedidos. As 'antenas' (linhas) mostram os valores mínimos e máximos, e os pontos fora delas são **outliers** - pedidos com valor muito acima ou abaixo do normal.")
+def criar_grafico_cancelamentos_por_hora(df_cancelados):
+    st.markdown("##### <i class='bi bi-clock'></i> Cancelamentos por Hora", unsafe_allow_html=True)
+    if df_cancelados.empty:
+        st.info("Não há cancelamentos para analisar por hora.")
+        return
+    df_cancelados['Hora'] = pd.to_numeric(df_cancelados['Hora'], errors='coerce')
+    hourly_cancel = df_cancelados.groupby('Hora').size().reset_index(name='Contagem')
+    horas_template = pd.DataFrame({'Hora': range(24)})
+    hourly_cancel = pd.merge(horas_template, hourly_cancel, on='Hora', how='left').fillna(0)
+    chart = alt.Chart(hourly_cancel).mark_bar(color="#CD5C5C").encode(x=alt.X('Hora:O', title='Hora do Dia'), y=alt.Y('Contagem:Q', title='Nº de Cancelamentos'), tooltip=['Hora', 'Contagem']).properties(height=300)
+    st.altair_chart(chart, use_container_width=True)
 
-        Q1 = df['Total'].quantile(0.25)
-        Q3 = df['Total'].quantile(0.75)
-        IQR = Q3 - Q1
-        limite_superior = Q3 + 1.5 * IQR
-
-        outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
-
-        if not outliers.empty:
-            st.markdown("###### Pedidos com Valores Atípicos (Acima da Média)")
-            for index, row in outliers.head(5).iterrows():
-                st.text(f"• {row['Data'].strftime('%d/%m')}: {formatar_moeda(row['Total'])} ({row['Canal de venda']})")
-        else:
-            st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
+def criar_donut_cancelamentos_por_canal(df_cancelados):
+    st.markdown("##### <i class='bi bi-pie-chart-fill'></i> Divisão por Canal de Venda", unsafe_allow_html=True)
+    if df_cancelados.empty or 'Canal de venda' not in df_cancelados.columns:
+        st.info("Não há dados de cancelamento por canal para exibir.")
+        return
+    canal_counts = df_cancelados['Canal de venda'].value_counts().reset_index()
+    canal_counts.columns = ['Canal', 'Contagem']
+    chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(theta=alt.Theta(field="Contagem", type="quantitative"), color=alt.Color(field="Canal", type="nominal", title="Canal"), tooltip=['Canal', 'Contagem']).properties(height=300)
+    st.altair_chart(chart, use_container_width=True)
