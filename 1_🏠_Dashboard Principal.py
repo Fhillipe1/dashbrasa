@@ -14,6 +14,7 @@ st.set_page_config(
 )
 visualization.aplicar_css_local("style/style.css")
 
+
 # --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
@@ -35,6 +36,7 @@ def carregar_dados():
 
 df_validos, df_cancelados = carregar_dados()
 
+
 # --- CABEÇALHO COM LOGO E TÍTULO ---
 col_logo, col_titulo = st.columns([0.1, 0.9])
 with col_logo:
@@ -42,6 +44,7 @@ with col_logo:
 with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
+
 
 # --- FILTROS NO CORPO DA PÁGINA ---
 if not df_validos.empty:
@@ -68,13 +71,16 @@ if not df_validos.empty:
     tab_resumo, tab_delivery, tab_cancelados = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
-        # CORREÇÃO: Usando st.markdown com tag HTML para o ícone
-        st.markdown("### <i class='bi bi-bar-chart-line-fill'></i> Visão Geral do Período Filtrado", unsafe_allow_html=True)
+        st.markdown("### :bar_chart: Visão Geral do Período Filtrado")
         
         visualization.criar_cards_resumo(df_filtrado)
+        
         st.markdown("<br>", unsafe_allow_html=True)
+
         visualization.criar_cards_dias_semana(df_filtrado)
+
         st.markdown("<br>", unsafe_allow_html=True)
+        
         visualization.criar_grafico_tendencia(df_filtrado)
 
     with tab_delivery:
