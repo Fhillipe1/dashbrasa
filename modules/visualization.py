@@ -170,7 +170,7 @@ def criar_donut_cancelamentos_por_canal(df_cancelados):
     chart = alt.Chart(canal_counts).mark_arc(innerRadius=80).encode(theta=alt.Theta(field="Contagem", type="quantitative"), color=alt.Color(field="Canal", type="nominal", title="Canal"), tooltip=['Canal', 'Contagem']).properties(height=300)
     st.altair_chart(chart, use_container_width=True)
 
-# --- FUNÇÕES ATUALIZADAS ---
+# --- FUNÇÕES ATUALIZADAS E CORRIGIDAS ---
 def criar_donut_e_resumo_canais(df):
     st.markdown("#### <i class='bi bi-pie-chart-fill'></i> Análise por Canal de Venda", unsafe_allow_html=True)
     if df.empty:
@@ -192,11 +192,13 @@ def criar_donut_e_resumo_canais(df):
         ticket_medio_geral = df['Total'].sum() / len(df) if len(df) > 0 else 0
         df_canal_sorted = df_canal.sort_values(by="Faturamento", ascending=False)
         for index, row in df_canal_sorted.iterrows():
-            canal = row['Canal de venda']; tm_canal = row['Ticket Medio']
+            canal = row['Canal de venda']
+            tm_canal = row['Ticket Medio']
+            # CORREÇÃO: Usa st.write para texto simples e st.markdown para os coloridos
             comparativo_str = "acima" if tm_canal > ticket_medio_geral else "abaixo"
-            seta = "▲" if comparativo_str == "acima" else "▼"
-            insight_text = f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}** ({seta} da média geral de {formatar_moeda(ticket_medio_geral)})."
-            st.markdown(insight_text)
+            cor = "green" if comparativo_str == "acima" else "red"
+            st.markdown(f"• **{canal}:** Ticket médio de **{formatar_moeda(tm_canal)}**, que está :{cor}[{comparativo_str}] da média geral.", unsafe_allow_html=False)
+
 
 def criar_boxplot_e_analise_outliers(df):
     st.markdown("#### <i class='bi bi-box-seam'></i> Análise de Dispersão de Valores", unsafe_allow_html=True)
@@ -204,9 +206,10 @@ def criar_boxplot_e_analise_outliers(df):
         st.info("Não há dados para a análise de dispersão."); return
     col1, col2 = st.columns([1, 1])
     with col1:
+        # CORREÇÃO: Removido extent='min-max'
         chart = alt.Chart(df).mark_boxplot(outliers=True).encode(
             y=alt.Y('Total:Q', title='Valor do Pedido (R$)', scale=alt.Scale(zero=False)),
-            tooltip=[alt.Tooltip('Data:T', title='Data'), alt.Tooltip('Total:Q', title='Valor do Pedido', format='$,.2f')]
+            tooltip=[alt.Tooltip('Data:T', title='Data'), alt.Tooltip('Total:Q', title='Valor do Pedido', format='$.2f')]
         ).properties(height=350, title="Distribuição Geral dos Valores de Pedido")
         st.altair_chart(chart, use_container_width=True)
     with col2:
