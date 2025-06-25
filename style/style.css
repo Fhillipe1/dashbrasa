@@ -33,7 +33,7 @@ div[data-testid="stExpander"] div[data-testid="stMultiSelect"] label {
     transition: box-shadow 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: center; 
 }
 
 .metric-card:hover {
@@ -66,7 +66,6 @@ div[data-testid="stExpander"] div[data-testid="stMultiSelect"] label {
     text-align: center;
 }
 
-/* --- NOVOS ESTILOS PARA O KPI (DELTA) --- */
 .metric-delta {
     font-size: 0.9rem;
     font-weight: 600;
