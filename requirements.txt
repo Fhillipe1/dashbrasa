@@ -4,9 +4,6 @@ gspread
 gspread-dataframe
 numpy
 pytz
-selenium
-webdriver-manager
-selenium-stealth
 openpyxl
 requests
 tqdm
