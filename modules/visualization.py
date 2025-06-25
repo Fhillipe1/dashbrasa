@@ -5,8 +5,11 @@ import plotly.graph_objects as go
 
 def aplicar_css_local(caminho_arquivo):
     """Aplica um arquivo CSS local ao app Streamlit."""
-    with open(caminho_arquivo) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    try:
+        with open(caminho_arquivo) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error(f"Arquivo CSS não encontrado em: {caminho_arquivo}")
 
 def formatar_moeda(valor):
     """Formata um número para o padrão monetário brasileiro (R$)."""
@@ -50,9 +53,10 @@ def criar_cards_dias_semana(df):
 
             num_dias_unicos = df_dia['Data'].nunique()
             media_pedidos_dia = num_pedidos_dia / num_dias_unicos if num_dias_unicos > 0 else 0
-
-            st.metric(label="Ticket Médio", value=formatar_moeda(ticket_medio))
-            st.metric(label="Média Pedidos", value=f"{media_pedidos_dia:.1f}")
+            
+            # Labels ajustadas para serem mais curtas
+            st.metric(label="Tkt. Médio", value=formatar_moeda(ticket_medio))
+            st.metric(label="Pedidos/Dia", value=f"{media_pedidos_dia:.1f}")
             st.metric(label="Horário Pico", value=horario_pico_str)
             st.metric(label="Média Pedido (Pico)", value=formatar_moeda(valor_medio_pico))
 
@@ -65,7 +69,8 @@ def criar_grafico_tendencia(df):
         st.info("Não há dados para o período selecionado.")
         return
 
-    daily_revenue = df.groupby('Data')['Total'].sum().reset_index()
+    daily_revenue = df.groupby(pd.to_datetime(df['Data']))['Total'].sum().reset_index()
+    daily_revenue = daily_revenue.sort_values(by='Data')
     
     if len(daily_revenue) < 2:
         st.info("É necessário ter pelo menos dois dias de dados no período selecionado para mostrar uma tendência.")
@@ -76,7 +81,7 @@ def criar_grafico_tendencia(df):
     fig = go.Figure()
 
     for i in range(1, len(daily_revenue)):
-        color = "#2E8B57" if daily_revenue['diff'].iloc[i] >= 0 else "#CD5C5C" # Verde e Vermelho mais suaves
+        color = "#2E8B57" if daily_revenue['diff'].iloc[i] >= 0 else "#CD5C5C"
         fig.add_trace(go.Scatter(
             x=daily_revenue['Data'].iloc[i-1:i+1],
             y=daily_revenue['Total'].iloc[i-1:i+1],
