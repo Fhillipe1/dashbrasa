@@ -1,75 +1,72 @@
 # pages/2_🔥_Resultados São João.py
-
 import streamlit as st
 import pandas as pd
 from modules import data_handler, sao_joao_handler, visualization
-from datetime import datetime, date
+from datetime import date
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- CONFIGURAÇÃO DA PÁGINA E CSS ---
 st.set_page_config(layout="wide", page_title="Análise São João")
 visualization.aplicar_css_local("style/style.css")
 
-st.title("🔥 Análise de Resultados - Madrugada de São João")
+st.title("🔥 Análise de Resultados - Madrugada")
+st.markdown("Análise dedicada ao faturamento da loja no período da madrugada (das 00:00 às 04:59).")
 st.markdown("---")
 
 # --- CARREGAMENTO DOS DADOS ---
-# A função carregar_dados já está em cache, então esta chamada é super rápida
-df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
+df_validos, _ = data_handler.ler_dados_do_gsheets()
 
 if df_validos.empty:
-    st.error("Não foi possível carregar os dados. Verifique a página 'Atualizar Relatório' ou a sua Planilha Google.")
+    st.error("Não foi possível carregar os dados. Verifique a página 'Atualizar Relatório' ou sua Planilha Google.")
     st.stop()
 
 # --- PRÉ-PROCESSAMENTO E FILTROS ---
-
-# Converte colunas para os tipos corretos
 df_validos['Data'] = pd.to_datetime(df_validos['Data'], errors='coerce').dt.date
 df_validos['Hora'] = pd.to_numeric(df_validos['Hora'], errors='coerce')
-df_validos = df_validos.dropna(subset=['Data', 'Hora']) # Garante que não há datas/horas nulas
+df_validos.dropna(subset=['Data', 'Hora'], inplace=True)
 
-# Filtra o período da madrugada (00:00 às 04:59)
 df_madrugada = df_validos[df_validos['Hora'].between(0, 4)].copy()
 
-st.sidebar.header("Filtros da Madrugada")
+with st.expander("📅 Aplicar Filtros", expanded=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        data_min = df_madrugada['Data'].min() if not df_madrugada.empty else date.today()
+        data_max = df_madrugada['Data'].max() if not df_madrugada.empty else date.today()
+        data_inicial = st.date_input("Data Inicial", value=data_min, min_value=data_min, max_value=data_max, key="sj_data_inicial")
+        data_final = st.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max, key="sj_data_final")
 
-# Filtros da barra lateral
-data_min = df_madrugada['Data'].min() if not df_madrugada.empty else date.today()
-data_max = df_madrugada['Data'].max() if not df_madrugada.empty else date.today()
+    # Lógica para encontrar o nome da coluna de pagamento
+    coluna_pagamento = data_handler.encontrar_nome_coluna(df_madrugada, ['Forma de pagamento', 'Pagamento', 'Forma Pagamento'])
 
-data_inicial = st.sidebar.date_input("Data Inicial", value=data_min, min_value=data_min, max_value=data_max)
-data_final = st.sidebar.date_input("Data Final", value=data_max, min_value=data_min, max_value=data_max)
-
-# Filtro por forma de pagamento
-if 'Forma de pagamento' in df_madrugada.columns:
-    formas_pagamento = df_madrugada['Forma de pagamento'].dropna().unique()
-    pagamentos_selecionados = st.sidebar.multiselect(
-        "Forma de Pagamento",
-        options=formas_pagamento,
-        default=formas_pagamento
-    )
-    # Aplica todos os filtros
-    df_filtrado = df_madrugada[
-        (df_madrugada['Data'] >= data_inicial) &
-        (df_madrugada['Data'] <= data_final) &
-        (df_madrugada['Forma de pagamento'].isin(pagamentos_selecionados))
-    ]
-else:
-    df_filtrado = df_madrugada[
-        (df_madrugada['Data'] >= data_inicial) &
-        (df_madrugada['Data'] <= data_final)
-    ]
+    with col2:
+        if coluna_pagamento:
+            formas_pagamento = df_madrugada[coluna_pagamento].dropna().unique()
+            pagamentos_selecionados = st.multiselect(
+                "Forma de Pagamento",
+                options=formas_pagamento,
+                default=formas_pagamento,
+                key="sj_pagamentos"
+            )
+            df_filtrado = df_madrugada[
+                (df_madrugada['Data'] >= data_inicial) &
+                (df_madrugada['Data'] <= data_final) &
+                (df_madrugada[coluna_pagamento].isin(pagamentos_selecionados))
+            ]
+        else:
+            st.warning("Coluna 'Forma de pagamento' não encontrada no relatório.")
+            df_filtrado = df_madrugada[
+                (df_madrugada['Data'] >= data_inicial) &
+                (df_madrugada['Data'] <= data_final)
+            ]
 
 # --- EXIBIÇÃO DO DASHBOARD ---
-
-# KPIs
 sao_joao_handler.display_kpis(df_filtrado)
 st.markdown("---")
 
-# Gráficos em duas colunas
-col1, col2 = st.columns(2)
-with col1:
+col_graf1, col_graf2 = st.columns(2)
+with col_graf1:
     sao_joao_handler.display_daily_revenue_chart(df_filtrado)
-    st.markdown("<br>", unsafe_allow_html=True)
-    sao_joao_handler.display_hourly_performance_chart(df_filtrado)
-with col2:
-    sao_joao_handler.display_payment_method_pie_chart(df_filtrado)
+with col_graf2:
+    sao_joao_handler.display_payment_method_pie_chart(df_filtrado, coluna_pagamento)
+
+st.markdown("<br>", unsafe_allow_html=True)
+sao_joao_handler.display_hourly_performance_chart(df_filtrado)
