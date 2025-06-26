@@ -6,6 +6,30 @@ from modules import data_handler, cep_handler
 
 st.set_page_config(layout="wide", page_title="Atualizar Relatório de Vendas")
 
+# Verificação de senha
+def check_password():
+    """Verifica se o usuário digitou a senha correta."""
+    if 'password_correct' not in st.session_state:
+        st.session_state.password_correct = False
+    
+    if not st.session_state.password_correct:
+        password_placeholder = st.empty()
+        password = password_placeholder.text_input("Digite a senha para acessar:", type="password")
+        
+        if password:
+            if password == st.secrets["update_password"]:
+                st.session_state.password_correct = True
+                password_placeholder.empty()  # Remove o input de senha após acertar
+            else:
+                st.error("Senha incorreta. Tente novamente.")
+                st.stop()
+    
+    return st.session_state.password_correct
+
+# Só mostra o conteúdo se a senha estiver correta
+if not check_password():
+    st.stop()
+
 st.title("🔄 Atualizar Relatório de Vendas")
 
 st.markdown("""
