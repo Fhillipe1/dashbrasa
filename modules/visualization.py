@@ -239,31 +239,54 @@ def criar_distplot_e_analise(df):
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
 
-def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente):
+def criar_tabela_top_clientes(df_delivery):
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
-    if not nome_coluna_cliente or nome_coluna_cliente not in df_delivery.columns:
-        st.warning("Não foi possível encontrar a coluna de nome do cliente no relatório para gerar o ranking.")
-        return
-    if df_delivery[nome_coluna_cliente].isnull().all():
+    
+    nome_coluna_cliente = 'Consumidor'
+
+    if df_delivery.empty or nome_coluna_cliente not in df_delivery.columns or df_delivery[nome_coluna_cliente].isnull().all():
         st.info("Não há dados de clientes suficientes para gerar um ranking.")
         return
+
     df_delivery_com_cliente = df_delivery.dropna(subset=[nome_coluna_cliente])
     if df_delivery_com_cliente.empty:
         st.info("Não há nomes de clientes válidos para gerar um ranking.")
         return
-    agg_dict = {'Quantidade_Pedidos': ('Pedido', 'count'), 'Valor_Total': ('Total', 'sum')}
+
+    agg_dict = {
+        'Quantidade_Pedidos': ('Pedido', 'count'),
+        'Valor_Total': ('Total', 'sum')
+    }
     if 'Bairro' in df_delivery_com_cliente.columns:
         agg_dict['Bairro'] = ('Bairro', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
     if 'Canal de venda' in df_delivery_com_cliente.columns:
         agg_dict['Canal_Preferido'] = ('Canal de venda', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
+
     df_clientes = df_delivery_com_cliente.groupby(nome_coluna_cliente).agg(**agg_dict).reset_index()
+    
     df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
+    
     medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
     df_clientes_sorted['Rank'] = [medalhas.get(i, f"{i+1}º") for i in df_clientes_sorted.index]
+    
     df_clientes_sorted.rename(columns={nome_coluna_cliente: 'Cliente'}, inplace=True)
+    
     colunas_para_exibir = ['Rank', 'Cliente']
     if 'Bairro' in df_clientes_sorted.columns: colunas_para_exibir.append('Bairro')
     if 'Canal_Preferido' in df_clientes_sorted.columns: colunas_para_exibir.append('Canal_Preferido')
     colunas_para_exibir.extend(['Quantidade_Pedidos', 'Valor_Total'])
+    
     df_final = df_clientes_sorted[colunas_para_exibir]
-    st.dataframe(df_final, column_config={"Rank": "Posição", "Cliente": "Nome do Cliente", "Canal_Preferido": "Canal Preferido", "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"), "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")}, hide_index=True, use_container_width=True)
+
+    st.dataframe(
+        df_final,
+        column_config={
+            "Rank": "Posição",
+            "Cliente": "Nome do Cliente",
+            "Canal_Preferido": "Canal Preferido",
+            "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"),
+            "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")
+        },
+        hide_index=True,
+        use_container_width=True
+    )
