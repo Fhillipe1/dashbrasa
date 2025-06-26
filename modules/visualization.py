@@ -276,8 +276,6 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
         }
     </style>
     """, unsafe_allow_html=True)
-
-    st.markdown(TABELA_CSS, unsafe_allow_html=True)  # <--- ADIÇÃO CRÍTICA (linha nova)
     
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
     
