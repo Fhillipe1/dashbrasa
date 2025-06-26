@@ -1,0 +1,11 @@
+/* style/oraculo_style.css */
+
+/* Estilo para a mensagem do usuário */
+div[data-testid="chat-message-container"]:has(div[data-testid="stChatMessageContent-user"]) {
+    background-color: #262730;
+}
+
+/* Estilo para a mensagem do assistente (IA) */
+div[data-testid="chat-message-container"]:has(div[data-testid="stChatMessageContent-assistant"]) {
+    background-color: #383a49;
+}
