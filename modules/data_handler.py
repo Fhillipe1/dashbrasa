@@ -21,7 +21,6 @@ def _get_google_sheets_client():
 # --- FUNÇÕES DE DADOS ---
 
 def tratar_dados_saipos(df_bruto):
-    # (Esta função permanece inalterada)
     if df_bruto is None or df_bruto.empty:
         return pd.DataFrame(), pd.DataFrame()
     df = df_bruto.copy()
@@ -61,8 +60,11 @@ def tratar_dados_saipos(df_bruto):
             df_validos['Canal de venda Padronizado'] = df_validos['Canal de venda'].apply(_padronizar_texto)
             df_validos['Tipo de Canal'] = np.where(df_validos['Canal de venda Padronizado'].isin(delivery_channels), 'Delivery', 'Salão/Telefone')
     for temp_df in [df_validos, df_cancelados]:
+        # Converte as colunas de data/hora para texto para salvar na planilha
         if 'Data da venda' in temp_df.columns:
-            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            # Primeiro, garante que é datetime para poder usar .dt
+            temp_df['Data da venda'] = pd.to_datetime(temp_df['Data da venda'], errors='coerce')
+            temp_df['Data da venda'] = temp_df['Data da venda'].dt.strftime('%Y-%m-%d %H:%M:%S')
         if 'Data' in temp_df.columns:
             temp_df['Data'] = temp_df['Data'].astype(str)
     return df_validos, df_cancelados
@@ -78,68 +80,44 @@ def carregar_dados_para_gsheets(df_novos_validos, df_novos_cancelados):
     if not sheet_name: return
     try:
         spreadsheet = gc.open(sheet_name)
+        # Usa a nova função simplificada para ambas as abas
         _atualizar_aba_robusta(spreadsheet, "Página1", df_novos_validos)
         _atualizar_aba_robusta(spreadsheet, "Cancelados", df_novos_cancelados)
+        st.success("Planilhas atualizadas com sucesso!")
     except Exception as e:
         st.error(f"Ocorreu um erro ao carregar os dados para o Google Sheets: {e}")
 
+# --- FUNÇÃO DE ATUALIZAÇÃO SIMPLIFICADA ---
 def _atualizar_aba_robusta(spreadsheet, nome_aba, df_novos):
+    """
+    Limpa completamente uma aba e insere os novos dados do relatório.
+    Esta é a forma mais segura de evitar duplicatas.
+    """
+    st.write(f"Atualizando a aba '{nome_aba}'...")
     try:
         worksheet = spreadsheet.worksheet(nome_aba)
+        st.write(f"Limpando dados antigos da aba '{nome_aba}'...")
+        worksheet.clear() 
     except gspread.WorksheetNotFound:
         st.write(f"Aba '{nome_aba}' não encontrada. Criando uma nova...")
-        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="1", cols="1")
-    st.write(f"Lendo dados existentes da aba '{nome_aba}'...")
-    df_existente = get_as_dataframe(worksheet, evaluate_formulas=False)
-    df_existente = df_existente.astype(str)
-    df_novos = df_novos.astype(str)
-    if df_existente.empty:
-        st.write(f"Aba '{nome_aba}' vazia. Escrevendo {len(df_novos)} novas linhas.")
-        df_final = df_novos
-    else:
-        colunas_totais = df_existente.columns.union(df_novos.columns)
-        df_existente = df_existente.reindex(columns=colunas_totais, fill_value='')
-        df_novos = df_novos.reindex(columns=colunas_totais, fill_value='')
-        df_final = pd.concat([df_existente, df_novos]).drop_duplicates().sort_values(by='Pedido').reset_index(drop=True)
-        st.write(f"Sincronizando... Total de {len(df_final)} linhas únicas para a aba '{nome_aba}'.")
-    worksheet.clear()
-    set_with_dataframe(worksheet, df_final, include_index=False, resize=True)
-    st.success(f"Aba '{nome_aba}' atualizada com sucesso!")
+        worksheet = spreadsheet.add_worksheet(title=nome_aba, rows="1", cols=len(df_novos.columns) if not df_novos.empty else 20)
+    
+    st.write(f"Inserindo {len(df_novos)} linhas na aba '{nome_aba}'...")
+    # Converte tudo para string para máxima compatibilidade com o Google Sheets
+    set_with_dataframe(worksheet, df_novos.astype(str), include_index=False, resize=True)
+    st.success(f"Aba '{nome_aba}' sincronizada!")
 
-# --- FUNÇÃO ATUALIZADA ---
 def ler_dados_do_gsheets():
     """Lê os dados do Google Sheets. Retorna dataframes vazios em caso de erro."""
     try:
         gc = _get_google_sheets_client()
-        if gc is None:
-            print("Falha na conexão com o Google Sheets.")
-            return pd.DataFrame(), pd.DataFrame()
-
-        sheet_name = st.secrets.get("GOOGLE_SHEET_NAME")
-        if not sheet_name:
-            print("Nome da planilha não configurado nos segredos.")
-            return pd.DataFrame(), pd.DataFrame()
-            
+        if gc is None: print("Falha na conexão com o Google Sheets."); return pd.DataFrame(), pd.DataFrame()
+        sheet_name = st.secrets.get("GOOGLE_SHEET_NAME");
+        if not sheet_name: print("Nome da planilha não configurado nos segredos."); return pd.DataFrame(), pd.DataFrame()
         spreadsheet = gc.open(sheet_name)
-        
-        # Ler dados válidos
-        try:
-            worksheet_validos = spreadsheet.worksheet("Página1")
-            df_validos = get_as_dataframe(worksheet_validos, evaluate_formulas=False).dropna(how='all')
-        except gspread.WorksheetNotFound:
-            print("Aba 'Página1' não encontrada.")
-            df_validos = pd.DataFrame()
-
-        # Ler dados cancelados
-        try:
-            worksheet_cancelados = spreadsheet.worksheet("Cancelados")
-            df_cancelados = get_as_dataframe(worksheet_cancelados, evaluate_formulas=False).dropna(how='all')
-        except gspread.WorksheetNotFound:
-            print("Aba 'Cancelados' não encontrada.")
-            df_cancelados = pd.DataFrame()
-            
+        df_validos = get_as_dataframe(spreadsheet.worksheet("Página1"), evaluate_formulas=False).dropna(how='all')
+        df_cancelados = get_as_dataframe(spreadsheet.worksheet("Cancelados"), evaluate_formulas=False).dropna(how='all')
         return df_validos, df_cancelados
-
     except Exception as e:
         print(f"Ocorreu um erro ao ler os dados do Google Sheets: {e}")
         return pd.DataFrame(), pd.DataFrame()
