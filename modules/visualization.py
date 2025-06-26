@@ -278,15 +278,25 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     
     df_final = df_clientes_sorted[colunas_para_exibir]
 
+    # No visualization.py, atualize a chamada st.dataframe():
     st.dataframe(
         df_final,
         column_config={
-            "Rank": "Posição",
-            "Cliente": "Nome do Cliente",
-            "Canal_Preferido": "Canal Preferido",
-            "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"),
-            "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")
+            "Rank": st.column_config.TextColumn("Posição"),
+            "Cliente": st.column_config.TextColumn("Nome do Cliente"),
+            "Bairro": st.column_config.TextColumn("Bairro"),
+            "Canal_Preferido": st.column_config.TextColumn("Canal Preferido"),
+            "Valor_Total": st.column_config.NumberColumn(
+                "Valor Gasto (R$)",
+                format="R$ %.2f",
+                help="Valor total gasto pelo cliente"
+            ),
+            "Quantidade_Pedidos": st.column_config.NumberColumn(
+                "Nº de Pedidos",
+                help="Total de pedidos realizados"
+            )
         },
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
+        height=min(400, 200 + len(df_final) * 35)  # Altura dinâmica
     )
