@@ -239,7 +239,7 @@ def criar_distplot_e_analise(df):
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
 
-def criar_tabela_top_clientes(df_delivery):
+def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
     
     nome_coluna_cliente = 'Consumidor'
