@@ -34,65 +34,53 @@ try:
     df_validos['Hora'] = pd.to_numeric(df_validos['Hora'], errors='coerce')
     df_validos.dropna(subset=['Data', 'Hora'], inplace=True)
 
-    df_madrugada = df_validos[df_validos['Hora'].between(0, 4)].copy()
+    # --- LÓGICA DE FILTRAGEM SIMPLIFICADA ---
 
-    # Define o período junino fixo
+    # 1. Define as datas da campanha
     DATA_INICIAL_CAMPANHA = date(2025, 5, 28)
     DATA_FINAL_CAMPANHA = date(2025, 6, 30)
     
-    # Filtra os dados apenas para o período da campanha, para definir os limites dos filtros
-    df_periodo_junino = df_madrugada[
-        (df_madrugada['Data'] >= DATA_INICIAL_CAMPANHA) &
-        (df_madrugada['Data'] <= DATA_FINAL_CAMPANHA)
-    ]
-
-    if df_periodo_junino.empty:
-        st.info("Não foram encontrados pedidos no período da campanha junina (28/05 a 30/06) no horário da madrugada.")
-        st.stop()
-
-    # --- FILTROS INTERATIVOS ---
+    # 2. Cria os widgets de filtro com os limites da campanha
     with st.expander("📅 Aplicar Filtros", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
-            # CORREÇÃO: Os valores min e max do seletor são travados no período da campanha
-            data_inicial = st.date_input(
+            data_inicial_selecionada = st.date_input(
                 "Data Inicial", 
-                value=df_periodo_junino['Data'].min(), 
-                min_value=df_periodo_junino['Data'].min(), 
-                max_value=df_periodo_junino['Data'].max(),
+                value=DATA_INICIAL_CAMPANHA, 
+                min_value=DATA_INICIAL_CAMPANHA, 
+                max_value=DATA_FINAL_CAMPANHA,
                 key="sj_data_inicial"
             )
         with col2:
-            data_final = st.date_input(
+            data_final_selecionada = st.date_input(
                 "Data Final", 
-                value=df_periodo_junino['Data'].max(), 
-                min_value=df_periodo_junino['Data'].min(), 
-                max_value=df_periodo_junino['Data'].max(),
+                value=DATA_FINAL_CAMPANHA, 
+                min_value=DATA_INICIAL_CAMPANHA, 
+                max_value=DATA_FINAL_CAMPANHA,
                 key="sj_data_final"
             )
 
-        coluna_pagamento = encontrar_nome_coluna(df_periodo_junino, ['Forma de pagamento', 'Pagamento', 'Forma Pagamento'])
-
+        coluna_pagamento = encontrar_nome_coluna(df_validos, ['Forma de pagamento', 'Pagamento', 'Forma Pagamento'])
+        
+        pagamentos_selecionados = []
         if coluna_pagamento:
-            formas_pagamento = sorted(df_periodo_junino[coluna_pagamento].dropna().unique())
+            formas_pagamento = sorted(df_validos[coluna_pagamento].dropna().unique())
             pagamentos_selecionados = st.multiselect(
                 "Filtrar por Forma de Pagamento",
                 options=formas_pagamento,
                 default=formas_pagamento,
                 key="sj_pagamentos"
             )
-            # Aplica todos os filtros
-            df_filtrado = df_periodo_junino[
-                (df_periodo_junino['Data'] >= data_inicial) &
-                (df_periodo_junino['Data'] <= data_final) &
-                (df_periodo_junino[coluna_pagamento].isin(pagamentos_selecionados))
-            ]
         else:
             st.warning("Coluna 'Forma de pagamento' não encontrada para o filtro.")
-            df_filtrado = df_periodo_junino[
-                (df_periodo_junino['Data'] >= data_inicial) &
-                (df_periodo_junino['Data'] <= data_final)
-            ]
+    
+    # 3. Aplica todos os filtros de uma só vez
+    df_filtrado = df_validos[
+        (df_validos['Data'] >= data_inicial_selecionada) &
+        (df_validos['Data'] <= data_final_selecionada) &
+        (df_validos['Hora'].between(0, 4)) &
+        (df_validos[coluna_pagamento].isin(pagamentos_selecionados) if coluna_pagamento and pagamentos_selecionados else True)
+    ]
 
     # --- EXIBIÇÃO DO DASHBOARD ---
     sao_joao_handler.display_kpis(df_filtrado)
