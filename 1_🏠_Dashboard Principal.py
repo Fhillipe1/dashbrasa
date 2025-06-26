@@ -1,22 +1,17 @@
 # 1_🏠_Dashboard_Principal.py
-
 import streamlit as st
 import pandas as pd
 from modules import data_handler, visualization
 from datetime import datetime
 import os
 
-# --- CONFIGURAÇÃO DA PÁGINA E CSS ---
 LOGO_URL = "https://site.labrasaburger.com.br/wp-content/uploads/2021/09/logo.png"
 st.set_page_config(layout="wide", page_title="Dashboard de Vendas La Brasa", page_icon=LOGO_URL)
 visualization.aplicar_css_local("style/style.css")
 
-
-# --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image(LOGO_URL, width=200)
 st.sidebar.title("Navegação")
 
-# --- CARREGAMENTO DOS DADOS ---
 @st.cache_data(ttl=300)
 def carregar_dados():
     df_validos, df_cancelados = data_handler.ler_dados_do_gsheets()
@@ -45,7 +40,6 @@ def carregar_cache_cep():
 df_validos, df_cancelados = carregar_dados()
 df_cache_cep = carregar_cache_cep()
 
-# --- CABEÇALHO COM LOGO E TÍTULO ---
 col_logo, col_titulo = st.columns([0.1, 0.9])
 with col_logo:
     st.image(LOGO_URL, width=100)
@@ -53,14 +47,7 @@ with col_titulo:
     st.title("Dashboard de Vendas")
 st.markdown("---")
 
-
-# --- CORPO DO APP ---
-# CORREÇÃO: Inicializa a variável NOME_COLUNA_CLIENTE fora do if
-NOME_COLUNA_CLIENTE = None
 if not df_validos.empty:
-    # Atribui o valor da coluna aqui
-    NOME_COLUNA_CLIENTE = data_handler.encontrar_nome_coluna_cliente(df_validos)
-
     with st.expander("📅 Aplicar Filtros e Ações", expanded=True):
         col1, col2, col3 = st.columns([2, 2, 1]) 
         with col1:
@@ -85,7 +72,6 @@ if not df_validos.empty:
     if not df_cancelados.empty:
         df_cancelados_filtrado = df_cancelados[(df_cancelados['Data'] >= data_inicial) & (df_cancelados['Data'] <= data_final)]
 
-    # --- ESTRUTURA DE ABAS ---
     tab_resumo, tab_delivery, tab_cancelados_aba = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
@@ -102,6 +88,7 @@ if not df_validos.empty:
         st.markdown("---")
         visualization.criar_donut_e_resumo_canais(df_filtrado)
         st.markdown("<br>", unsafe_allow_html=True)
+        
         visualization.criar_distplot_e_analise(df_filtrado)
 
     with tab_delivery:
@@ -118,8 +105,9 @@ if not df_validos.empty:
             visualization.criar_mapa_de_calor(df_delivery_filtrado, df_cache_cep)
             st.markdown("---")
             
-            # A chamada agora usa a variável definida no escopo principal
-            visualization.criar_tabela_top_clientes(df_delivery_filtrado, NOME_COLUNA_CLIENTE)
+            # A chamada agora é mais simples, sem passar o nome da coluna
+            visualization.criar_tabela_top_clientes(df_delivery_filtrado)
+
 
     with tab_cancelados_aba:
         st.markdown("### <i class='bi bi-x-circle'></i> Análise de Pedidos Cancelados", unsafe_allow_html=True)
