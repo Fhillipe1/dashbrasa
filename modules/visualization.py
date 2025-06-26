@@ -199,31 +199,24 @@ def criar_donut_e_resumo_canais(df):
                 st.badge(status_texto, color=status_cor)
 
 def criar_distplot_e_analise(df):
-    st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para a análise de dispersão."); return
-        
+    st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
     col1, col2 = st.columns([1, 1])
     with col1:
         dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
         hist_data = []
         group_labels = []
-
         for dia in dias_semana_ordem:
             dados_dia = df[df['Dia da Semana'] == dia]['Total']
-            # CORREÇÃO: Apenas inclui o dia no gráfico se tiver 2 ou mais pedidos
             if len(dados_dia) > 1:
                 hist_data.append(dados_dia.tolist())
                 group_labels.append(dia.split('. ')[1])
-        
         if not hist_data:
-             st.info("Não há dados suficientes (pelo menos 2 pedidos em um mesmo dia da semana) para gerar o gráfico de distribuição.")
-             return
-
+             st.info("Não há dados suficientes (pelo menos 2 pedidos em um mesmo dia da semana) para gerar o gráfico de distribuição."); return
         fig = ff.create_distplot(hist_data, group_labels, show_hist=False, show_rug=False)
         fig.update_layout(template="streamlit", showlegend=True, yaxis_title="Densidade", xaxis_title="Valor do Pedido (R$)", margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
         st.plotly_chart(fig, use_container_width=True)
-    
     with col2:
         st.markdown("###### O que este gráfico significa?")
         st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
@@ -253,10 +246,8 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente):
     agg_dict = {'Quantidade_Pedidos': ('Pedido', 'count'), 'Valor_Total': ('Total', 'sum')}
     if 'Bairro' in df_delivery_com_cliente.columns:
         agg_dict['Bairro'] = ('Bairro', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
-    # CORREÇÃO: Verifica e adiciona o canal de venda
     if 'Canal de venda' in df_delivery_com_cliente.columns:
         agg_dict['Canal_Preferido'] = ('Canal de venda', lambda x: x.mode().iat[0] if not x.mode().empty else 'N/A')
-
     df_clientes = df_delivery_com_cliente.groupby(nome_coluna_cliente).agg(**agg_dict).reset_index()
     df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
     medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
