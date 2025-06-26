@@ -106,7 +106,7 @@ if not df_validos.empty:
             st.markdown("---")
             
             # A chamada agora é mais simples, sem passar o nome da coluna
-             visualization.criar_tabela_top_clientes(df_delivery_filtrado, NOME_COLUNA_CLIENTE)
+            visualization.criar_tabela_top_clientes(df_delivery_filtrado, NOME_COLUNA_CLIENTE)
 
 
     with tab_cancelados_aba:
