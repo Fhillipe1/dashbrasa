@@ -198,39 +198,6 @@ def criar_donut_e_resumo_canais(df):
             with insight_cols[1]:
                 st.badge(status_texto, color=status_cor)
 
-def criar_distplot_e_analise(df):
-    if df.empty:
-        st.info("Não há dados para a análise de dispersão."); return
-    st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
-        hist_data = []
-        group_labels = []
-        for dia in dias_semana_ordem:
-            dados_dia = df[df['Dia da Semana'] == dia]['Total']
-            if len(dados_dia) > 1:
-                hist_data.append(dados_dia.tolist())
-                group_labels.append(dia.split('. ')[1])
-        if not hist_data:
-             st.info("Não há dados suficientes (pelo menos 2 pedidos em um mesmo dia da semana) para gerar o gráfico de distribuição."); return
-        fig = ff.create_distplot(hist_data, group_labels, show_hist=False, show_rug=False)
-        fig.update_layout(template="streamlit", showlegend=True, yaxis_title="Densidade", xaxis_title="Valor do Pedido (R$)", margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
-        st.plotly_chart(fig, use_container_width=True)
-    with col2:
-        st.markdown("###### O que este gráfico significa?")
-        st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
-        Q1 = df['Total'].quantile(0.25); Q3 = df['Total'].quantile(0.75); IQR = Q3 - Q1
-        limite_superior = Q3 + 1.5 * IQR
-        outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
-        if not outliers.empty:
-            st.markdown("###### Pedidos com Valores Atípicos (Acima)")
-            for index, row in outliers.head(5).iterrows():
-                data_formatada = pd.to_datetime(row['Data']).strftime('%d/%m')
-                st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
-        else:
-            st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
-
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente):
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
     if not nome_coluna_cliente or nome_coluna_cliente not in df_delivery.columns:
@@ -259,3 +226,45 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente):
     colunas_para_exibir.extend(['Quantidade_Pedidos', 'Valor_Total'])
     df_final = df_clientes_sorted[colunas_para_exibir]
     st.dataframe(df_final, column_config={"Rank": "Posição", "Cliente": "Nome do Cliente", "Canal_Preferido": "Canal Preferido", "Valor_Total": st.column_config.NumberColumn("Valor Gasto Total", format="R$ %.2f"), "Quantidade_Pedidos": st.column_config.NumberColumn("Nº de Pedidos")}, hide_index=True, use_container_width=True)
+
+# --- FUNÇÃO ATUALIZADA ---
+def criar_distplot_e_analise(df):
+    st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
+    if df.empty:
+        st.info("Não há dados para a análise de dispersão."); return
+        
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
+        
+        hist_data = []
+        group_labels = []
+
+        for dia in dias_semana_ordem:
+            dados_dia = df[df['Dia da Semana'] == dia]['Total']
+            # CORREÇÃO: Apenas inclui o dia no gráfico se tiver 2 ou mais pedidos
+            if len(dados_dia) > 1:
+                hist_data.append(dados_dia.tolist())
+                group_labels.append(dia.split('. ')[1])
+        
+        if not hist_data:
+             st.info("Não há dados suficientes (pelo menos 2 pedidos em um mesmo dia da semana) para gerar o gráfico de distribuição.")
+             return
+
+        fig = ff.create_distplot(hist_data, group_labels, show_hist=False, show_rug=False)
+        fig.update_layout(template="streamlit", showlegend=True, yaxis_title="Densidade", xaxis_title="Valor do Pedido (R$)", margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("###### O que este gráfico significa?")
+        st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
+        Q1 = df['Total'].quantile(0.25); Q3 = df['Total'].quantile(0.75); IQR = Q3 - Q1
+        limite_superior = Q3 + 1.5 * IQR
+        outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
+        if not outliers.empty:
+            st.markdown("###### Pedidos com Valores Atípicos (Acima)")
+            for index, row in outliers.head(5).iterrows():
+                data_formatada = pd.to_datetime(row['Data']).strftime('%d/%m')
+                st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
+        else:
+            st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
