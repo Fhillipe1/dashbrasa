@@ -1,72 +1,180 @@
-/* Estilo profissional para a tabela de top clientes */
-div[data-testid="stDataFrame"] {
-    background-color: #262730 !important;
-    border: 1px solid #444 !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.4) !important;
+/* ========== SEU CSS ORIGINAL (MANTIDO INTACTO) ========== */
+/* Estilo para o container dos filtros */
+div[data-testid="stExpander"] {
+    background-color: #262730;
+    border: 1px solid #444;
+    border-radius: 10px;
+}
+div[data-testid="stExpander"] summary {
+    font-size: 1.1rem;
+    color: #FAFAFA;
 }
 
-/* Cabeçalho da tabela */
-div[data-testid="stDataFrame"] thead th {
+/* Estilo para os campos dentro do filtro */
+div[data-testid="stExpander"] div[data-testid="stDateInput"],
+div[data-testid="stExpander"] div[data-testid="stMultiSelect"] {
+    background-color: white;
+    border-radius: 5px;
+    padding: 2px 5px;
+    margin-top: 5px;
+}
+div[data-testid="stExpander"] div[data-testid="stDateInput"] p,
+div[data-testid="stExpander"] div[data-testid="stMultiSelect"] label {
+    color: #111 !important;
+}
+
+/* Estilos para os cards customizados */
+.metric-card {
+    background-color: #262730;
+    border: 1px solid #444;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 5px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    transition: box-shadow 0.3s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; 
+}
+
+.metric-card:hover {
+    box-shadow: 0 0 15px rgba(200, 200, 200, 0.6);
+}
+
+.metric-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem !important;
+    font-weight: 600;
+    color: #afb8c1;
+    margin-bottom: 5px;
+}
+
+.metric-icon {
+    margin-right: 8px;
+    transition: transform 0.3s ease-in-out;
+}
+
+.metric-card:hover .metric-icon {
+    transform: scale(1.2);
+}
+
+.metric-value {
+    font-size: 1.8rem !important;
+    font-weight: 700;
+    color: #FAFAFA;
+    text-align: center;
+}
+
+.metric-delta {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 5px;
+}
+.metric-delta-positive {
+    color: #2E8B57; /* Verde */
+}
+.metric-delta-negative {
+    color: #CD5C5C; /* Vermelho */
+}
+
+hr.metric-divider {
+    margin: 10px 0;
+    border-color: #444;
+}
+
+.secondary-metric {
+    font-size: 0.8rem;
+    color: #afb8c1;
+    text-align: center;
+    margin: 2px 0;
+    line-height: 1.2;
+}
+
+i.bi {
+    vertical-align: middle;
+}
+
+/* ========== NOVOS ESTILOS PARA A TABELA ========== */
+/* Container da tabela */
+div[data-testid="stDataFrame-container"] {
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+
+/* Cabeçalho */
+div[data-testid="stDataFrame-container"] thead tr {
     background-color: #1e1e24 !important;
+    border-bottom: 2px solid #2E8B57 !important;
+}
+
+div[data-testid="stDataFrame-container"] thead th {
     color: #FAFAFA !important;
     font-weight: 700 !important;
-    border-bottom: 2px solid #444 !important;
-    padding: 12px 15px !important;
+    padding: 12px 16px !important;
+    text-transform: uppercase !important;
+    font-size: 0.85rem !important;
+    letter-spacing: 0.5px !important;
 }
 
 /* Linhas da tabela */
-div[data-testid="stDataFrame"] tbody tr {
+div[data-testid="stDataFrame-container"] tbody tr {
     border-bottom: 1px solid #444 !important;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease !important;
 }
 
-/* Células da tabela */
-div[data-testid="stDataFrame"] tbody td {
+/* Células */
+div[data-testid="stDataFrame-container"] tbody td {
     color: #afb8c1 !important;
-    padding: 12px 15px !important;
-    vertical-align: middle !important;
+    padding: 12px 16px !important;
+    font-size: 0.95rem !important;
 }
 
-/* Efeito hover nas linhas */
-div[data-testid="stDataFrame"] tbody tr:hover {
+/* Efeito hover */
+div[data-testid="stDataFrame-container"] tbody tr:hover {
     background-color: #2e2e38 !important;
 }
 
-/* Destaque para os top 3 clientes */
-div[data-testid="stDataFrame"] tbody tr:nth-child(-n+3) {
-    background-color: #2a2a35 !important;
+/* Destaque para os top 3 */
+div[data-testid="stDataFrame-container"] tbody tr:nth-child(1) {
+    background-color: rgba(46, 139, 87, 0.1) !important;
 }
-div[data-testid="stDataFrame"] tbody tr:nth-child(-n+3):hover {
-    background-color: #323240 !important;
+div[data-testid="stDataFrame-container"] tbody tr:nth-child(2) {
+    background-color: rgba(46, 139, 87, 0.07) !important;
 }
-
-/* Estilo especial para o 1º lugar */
-div[data-testid="stDataFrame"] tbody tr:nth-child(1) td:first-child::before {
-    content: "🥇 ";
-}
-div[data-testid="stDataFrame"] tbody tr:nth-child(2) td:first-child::before {
-    content: "🥈 ";
-}
-div[data-testid="stDataFrame"] tbody tr:nth-child(3) td:first-child::before {
-    content: "🥉 ";
+div[data-testid="stDataFrame-container"] tbody tr:nth-child(3) {
+    background-color: rgba(46, 139, 87, 0.04) !important;
 }
 
-/* Coluna de valor com destaque */
-div[data-testid="stDataFrame"] tbody td[aria-label="Valor Gasto Total"] {
+/* Coluna de valor */
+div[data-testid="stDataFrame-container"] td[aria-label="Valor Gasto Total"] {
     color: #2E8B57 !important;
     font-weight: 600 !important;
 }
 
-/* Scrollbar personalizada (se necessário) */
-div[data-testid="stDataFrame"]::-webkit-scrollbar {
-    height: 8px;
-    width: 8px;
+/* Medalhas para os top 3 */
+div[data-testid="stDataFrame-container"] td[aria-label="Posição"]:nth-child(1)::before {
+    content: "🥇 ";
+    filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.7));
 }
-div[data-testid="stDataFrame"]::-webkit-scrollbar-track {
+div[data-testid="stDataFrame-container"] td[aria-label="Posição"]:nth-child(2)::before {
+    content: "🥈 ";
+    filter: drop-shadow(0 0 2px rgba(192, 192, 192, 0.7));
+}
+div[data-testid="stDataFrame-container"] td[aria-label="Posição"]:nth-child(3)::before {
+    content: "🥉 ";
+    filter: drop-shadow(0 0 2px rgba(205, 127, 50, 0.7));
+}
+
+/* Scrollbar (se aplicável) */
+div[data-testid="stDataFrame-container"]::-webkit-scrollbar {
+    height: 8px;
     background: #1e1e24;
 }
-div[data-testid="stDataFrame"]::-webkit-scrollbar-thumb {
+div[data-testid="stDataFrame-container"]::-webkit-scrollbar-thumb {
     background: #444;
     border-radius: 4px;
 }
