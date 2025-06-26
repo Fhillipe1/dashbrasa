@@ -7,6 +7,52 @@ import textwrap
 import altair as alt
 import os
 
+TABELA_CSS = """
+<style>
+/* Container principal */
+div[data-testid="stDataFrame"] div[data-testid="data-grid-container"] {
+    background-color: #262730 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+
+/* Cabeçalho */
+div[data-testid="stDataFrame"] thead th {
+    background-color: #1e1e24 !important;
+    color: #FAFAFA !important;
+    border-bottom: 2px solid #2E8B57 !important;
+    font-weight: 700 !important;
+    padding: 12px 16px !important;
+}
+
+/* Linhas */
+div[data-testid="stDataFrame"] tbody tr {
+    border-bottom: 1px solid #444 !important;
+    transition: background-color 0.2s ease !important;
+}
+
+/* Células */
+div[data-testid="stDataFrame"] tbody td {
+    color: #afb8c1 !important;
+    padding: 12px 16px !important;
+    background-color: #262730 !important;
+}
+
+/* Efeito hover */
+div[data-testid="stDataFrame"] tbody tr:hover {
+    background-color: #2e2e38 !important;
+}
+
+/* Destaque para os top 3 */
+div[data-testid="stDataFrame"] tbody tr:nth-child(-n+3) {
+    background-color: rgba(46, 139, 87, 0.1) !important;
+}
+div[data-testid="stDataFrame"] tbody tr:nth-child(1) {
+    background-color: rgba(46, 139, 87, 0.15) !important;
+}
+</style>
+"""
+
 def aplicar_css_local(caminho_arquivo):
     try:
         with open(caminho_arquivo) as f:
@@ -240,10 +286,10 @@ def criar_distplot_e_analise(df):
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
+    st.markdown(TABELA_CSS, unsafe_allow_html=True)  # <--- ADIÇÃO CRÍTICA (linha nova)
+    
     st.markdown("#### <i class='bi bi-person-check-fill'></i> Top Clientes por Frequência", unsafe_allow_html=True)
     
-    nome_coluna_cliente = 'Consumidor'
-
     if df_delivery.empty or nome_coluna_cliente not in df_delivery.columns or df_delivery[nome_coluna_cliente].isnull().all():
         st.info("Não há dados de clientes suficientes para gerar um ranking.")
         return
@@ -266,7 +312,7 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     
     df_clientes_sorted = df_clientes.sort_values(by='Quantidade_Pedidos', ascending=False).reset_index(drop=True)
     
-    medalhas = {0: "1º 🥇", 1: "2º 🥈", 2: "3º 🥉"}
+    medalhas = {0: "🥇 1º", 1: "🥈 2º", 2: "🥉 3º"}  # <--- Medalhas ajustadas
     df_clientes_sorted['Rank'] = [medalhas.get(i, f"{i+1}º") for i in df_clientes_sorted.index]
     
     df_clientes_sorted.rename(columns={nome_coluna_cliente: 'Cliente'}, inplace=True)
@@ -278,14 +324,26 @@ def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     
     df_final = df_clientes_sorted[colunas_para_exibir]
 
-    # No visualization.py, atualize a chamada st.dataframe():
+    # Configuração atualizada da tabela
     st.dataframe(
         df_final,
         column_config={
-            "Rank": st.column_config.TextColumn("Posição"),
-            "Cliente": st.column_config.TextColumn("Nome do Cliente"),
-            "Bairro": st.column_config.TextColumn("Bairro"),
-            "Canal_Preferido": st.column_config.TextColumn("Canal Preferido"),
+            "Rank": st.column_config.TextColumn(
+                "Posição",
+                help="Ranking baseado no número de pedidos"
+            ),
+            "Cliente": st.column_config.TextColumn(
+                "Nome do Cliente",
+                help="Cliente frequente"
+            ),
+            "Bairro": st.column_config.TextColumn(
+                "Bairro",
+                help="Bairro mais frequente do cliente"
+            ),
+            "Canal_Preferido": st.column_config.TextColumn(
+                "Canal Preferido",
+                help="Canal de venda mais utilizado"
+            ),
             "Valor_Total": st.column_config.NumberColumn(
                 "Valor Gasto (R$)",
                 format="R$ %.2f",
