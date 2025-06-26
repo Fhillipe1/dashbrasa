@@ -1,0 +1,78 @@
+/* style/sao_joao_style.css */
+
+.stApp {
+    background: linear-gradient(135deg, #181A23 0%, #23263A 100%);
+    color: #FAFAFA;
+    font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+}
+
+/* --- Título Principal --- */
+.main-title-sj {
+    font-size: 3.5em;
+    font-weight: 900;
+    text-align: center;
+    color: #FFF;
+    text-shadow:
+        0 0 10px rgba(255, 75, 75, 0.6),
+        0 0 20px rgba(255, 75, 75, 0.4),
+        0 4px 15px rgba(0, 0, 0, 0.7);
+    margin-bottom: 0.1em;
+    letter-spacing: 0.03em;
+}
+
+.subtitle-sj {
+    font-size: 1.8em;
+    text-align: center;
+    color: #FFB347;
+    margin-top: -0.3em;
+    margin-bottom: 1.5em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-shadow: 0 2px 8px #0006;
+}
+
+/* --- Cards de Métricas (KPIs) --- */
+div[data-testid="stMetric"] {
+    background: linear-gradient(120deg, #23263A 60%, #181A23 100%);
+    border-radius: 18px;
+    padding: 25px 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px 0 #FF4B4B22, 0 2px 8px #000A;
+    border: 1.5px solid #FF4B4B33;
+    text-align: center;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+div[data-testid="stMetric"]:hover {
+    box-shadow: 0 12px 40px 0 #FFB34733, 0 4px 16px #000A;
+    border-color: #FFB34799;
+}
+
+/* Label do Card */
+div[data-testid="stMetricLabel"] > div {
+    font-size: 1.2em;
+    color: #FFB347;
+    font-weight: 600;
+}
+
+/* Valor do Card */
+div[data-testid="stMetricValue"] {
+    font-size: 3em;
+    font-weight: 900;
+    color: #FF4B4B;
+    text-shadow: 0 2px 12px #FF4B4B33, 0 1px 4px #0008;
+}
+
+/* --- Container dos Gráficos --- */
+.card-chart {
+    background: linear-gradient(120deg, #23263A 60%, #181A23 100%);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 8px 32px 0 #FF4B4B22, 0 2px 8px #000A;
+    border: 1.5px solid #FF4B4B33;
+}
+.card-chart h5 {
+    color: #FFB347;
+    text-align: center;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
