@@ -19,39 +19,90 @@
     margin-bottom: 1.5em;
     font-weight: 700;
 }
+
+/* CARDS COM BRILHO ATUALIZADO */
 div[data-testid="stMetric"] {
     background: linear-gradient(120deg, #23263A 60%, #181A23 100%);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 8px 32px 0 #FF4B4B1A, 0 2px 8px #000A;
-    border: 1.5px solid #FF4B4B33;
+    box-shadow: 0 8px 32px 0 #FF4B4B1A, 
+                0 2px 8px #000A,
+                inset 0 0 12px rgba(255, 180, 71, 0.15), /* Brilho interno */
+                0 0 15px rgba(255, 75, 75, 0.3); /* Brilho externo */
+    border: 1.5px solid #FF4B4B66; /* Borda mais visível */
     text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
 }
+
+/* Efeito de brilho ao passar o mouse */
+div[data-testid="stMetric"]:hover {
+    box-shadow: 0 8px 32px 0 #FF4B4B3A, 
+                0 4px 12px #000A,
+                inset 0 0 18px rgba(255, 180, 71, 0.25),
+                0 0 20px rgba(255, 75, 75, 0.5);
+    transform: translateY(-2px);
+}
+
+/* Brilho nos cantos */
+div[data-testid="stMetric"]::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 30px;
+    height: 30px;
+    background: radial-gradient(circle, rgba(255,180,71,0.8) 0%, rgba(255,75,75,0) 70%);
+    border-radius: 50%;
+    opacity: 0.6;
+    filter: blur(3px);
+}
+
 div[data-testid="stMetricLabel"] > div {
     font-size: 1.1em;
     color: #FFB347;
     font-weight: 600;
+    text-shadow: 0 0 6px rgba(255, 180, 71, 0.4);
 }
 div[data-testid="stMetricValue"] {
     font-size: 2.5em;
     font-weight: 900;
     color: #FF4B4B;
+    text-shadow: 0 0 8px rgba(255, 75, 75, 0.4);
 }
+
+/* CARDS DE GRÁFICOS COM BRILHO */
 .card-chart {
     background: #23263A88;
     border-radius: 12px;
     padding: 20px;
-    border: 1.5px solid #FF4B4B33;
+    border: 1.5px solid #FF4B4B66;
     height: 100%;
+    box-shadow: 0 4px 20px 0 #FF4B4B1A,
+                inset 0 0 10px rgba(255, 180, 71, 0.1),
+                0 0 12px rgba(255, 75, 75, 0.2);
+    transition: all 0.3s ease;
 }
+
+.card-chart:hover {
+    box-shadow: 0 6px 24px 0 #FF4B4B3A,
+                inset 0 0 15px rgba(255, 180, 71, 0.2),
+                0 0 18px rgba(255, 75, 75, 0.4);
+}
+
 .card-chart h5 {
     color: #FFB347;
     text-align: center;
     font-weight: 700;
     margin-bottom: 1rem;
+    text-shadow: 0 0 6px rgba(255, 180, 71, 0.3);
 }
+
 div[data-testid="stExpander"] {
     background-color: #23263A88;
     border: 1px solid #FF4B4B33;
     border-radius: 10px;
+    box-shadow: 0 2px 12px 0 #FF4B4B0F,
+                inset 0 0 8px rgba(255, 180, 71, 0.05);
 }
