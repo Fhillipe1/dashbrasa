@@ -1,79 +1,96 @@
 # modules/sao_joao_handler.py
+
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.figure_factory as ff
-from . import visualization as viz
+import altair as alt
+from . import visualization as viz 
 
 def display_kpis(df):
     """Exibe os KPIs principais: Faturamento Total e Número de Pedidos."""
-    if df.empty:
-        total_revenue = 0.0
-        total_orders = 0
-    else:
-        total_revenue = df['Total'].sum()
-        total_orders = len(df)
+    st.markdown("##### <i class='bi bi-clipboard-data'></i> Resumo do Período", unsafe_allow_html=True)
+    
+    # Usa nosso card customizado para manter a identidade visual
+    with st.container(border=False):
+        faturamento_total = df['Total'].sum()
+        num_pedidos = len(df)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric(label="Faturamento Total (Madrugada)", value=viz.formatar_moeda(total_revenue))
-    with col2:
-        st.metric(label="Total de Pedidos (Madrugada)", value=f"{total_orders}")
+        col1, col2 = st.columns(2)
+        with col1:
+            viz.criar_card("Faturamento na Madrugada", viz.formatar_moeda(faturamento_total), "<i class='bi bi-moon-stars-fill'></i>")
+        with col2:
+            viz.criar_card("Nº de Pedidos na Madrugada", f"{num_pedidos}", "<i class='bi bi-journal-check'></i>")
+
 
 def display_daily_revenue_chart(df):
     """Exibe um gráfico de linha com a evolução do faturamento por dia."""
-    with st.container(border=False):
-        st.markdown("<h5 class='card-title'>Faturamento Diário na Madrugada</h5>", unsafe_allow_html=True)
-        if df.empty or len(df['Data'].unique()) < 2:
-            st.info("Selecione pelo menos dois dias para ver a tendência.")
-            return
-        
-        daily_revenue = df.groupby('Data')['Total'].sum().reset_index()
-        fig = go.Figure(data=go.Scatter(
-            x=daily_revenue['Data'], y=daily_revenue['Total'],
-            mode='lines+markers', line=dict(color='#FF4B4B', width=3),
-            marker=dict(size=8, color='#FFB347', line=dict(width=1, color='#FF4B4B'))
-        ))
-        fig.update_layout(
-            template="plotly_dark", yaxis_title='Faturamento (R$)',
-            margin=dict(t=30, b=30, l=40, r=40),
-            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown("##### <i class='bi bi-graph-up'></i> Faturamento Diário na Madrugada", unsafe_allow_html=True)
+    
+    if df.empty:
+        st.info("Nenhum dado no período selecionado.")
+        return
+    
+    df_daily = df.groupby('Data')['Total'].sum().reset_index()
 
-def display_payment_method_pie_chart(df, payment_col):
-    """Exibe um gráfico de pizza com a distribuição do faturamento por forma de pagamento."""
-    with st.container(border=False):
-        st.markdown("<h5 class='card-title'>Faturamento por Forma de Pagamento</h5>", unsafe_allow_html=True)
-        if df.empty or not payment_col:
-            st.info("Não há dados de pagamento para exibir."); return
-
-        payment_revenue = df.groupby(payment_col)['Total'].sum().reset_index()
-        pie_colors = ['#FF4B4B', '#FFB347', '#7ACC7A', '#5CB0E8', '#AF7AE3', '#FF8C4B']
-        fig = go.Figure(data=go.Pie(
-            values=payment_revenue['Total'], labels=payment_revenue[payment_col],
-            hole=0.4, marker=dict(colors=pie_colors, line=dict(color='#0E1117', width=1.5)),
-            textposition='inside', textinfo='percent+label', hoverinfo='label+percent+value'
-        ))
-        fig.update_layout(template="plotly_dark", margin=dict(t=30, b=30, l=40, r=40), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+    if len(df_daily) < 2:
+        st.info("Selecione pelo menos dois dias no filtro para visualizar a tendência.")
+        return
+    
+    chart = alt.Chart(df_daily).mark_line(
+        point=alt.OverlayMarkDef(color="#FFB347"),
+        color='#FF4B4B'
+    ).encode(
+        x=alt.X('Data:T', title='Data'),
+        y=alt.Y('Total:Q', title='Faturamento (R$)'),
+        tooltip=[
+            alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+            alt.Tooltip('Total:Q', title='Faturamento', format='R$,.2f')
+        ]
+    ).properties(height=350)
+    st.altair_chart(chart, use_container_width=True)
 
 def display_hourly_performance_chart(df):
-    """Exibe um gráfico de barras com Pedidos e Faturamento por hora."""
-    with st.container(border=False):
-        st.markdown("<h5 class='card-title'>Pedidos por Hora na Madrugada</h5>", unsafe_allow_html=True)
-        if df.empty: return
+    """Exibe um gráfico de barras com Faturamento e hover com mais detalhes."""
+    st.markdown("##### <i class='bi bi-clock-history'></i> Performance por Hora (Madrugada)", unsafe_allow_html=True)
+    if df.empty:
+        st.info("Nenhum dado no período selecionado.")
+        return
 
-        hourly_summary = df.groupby('Hora').agg(Contagem_de_Pedidos=('Pedido', 'count')).reset_index()
-        horas_template = pd.DataFrame({'Hora': range(5)})
-        hourly_summary = pd.merge(horas_template, hourly_summary, on='Hora', how='left').fillna(0)
-        
-        hourly_summary['Hora_Str'] = hourly_summary['Hora'].apply(lambda x: f'{x:02d}:00')
+    hourly_summary = df.groupby('Hora').agg(
+        Pedidos=('Pedido', 'count'),
+        Faturamento=('Total', 'sum')
+    ).reset_index()
 
-        fig = go.Figure(data=go.Bar(
-            x=hourly_summary['Hora_Str'], y=hourly_summary['Contagem_de_Pedidos'],
-            marker=dict(color=hourly_summary['Contagem_de_Pedidos'], colorscale='Bluyl', line=dict(color='#0E1117', width=1)),
-            hovertemplate="<b>Hora</b>: %{x}<br><b>Pedidos</b>: %{y}<extra></extra>"
-        ))
-        fig.update_layout(xaxis_title='Hora', yaxis_title='Número de Pedidos', template="plotly_dark", margin=dict(t=30, b=30, l=40, r=40), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+    horas_madrugada = pd.DataFrame({'Hora': range(5)})
+    hourly_summary = pd.merge(horas_madrugada, hourly_summary, on='Hora', how='left').fillna(0)
+    
+    hourly_summary['Ticket Medio'] = hourly_summary.apply(
+        lambda row: row['Faturamento'] / row['Pedidos'] if row['Pedidos'] > 0 else 0, axis=1
+    )
+
+    # Gráfico de barras onde a altura é o Faturamento
+    barras = alt.Chart(hourly_summary).mark_bar(
+        cornerRadius=5
+    ).encode(
+        x=alt.X('Hora:O', title='Hora', axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Faturamento:Q', title='Faturamento (R$)'),
+        color=alt.Color('Faturamento:Q', scale=alt.Scale(scheme='reds'), legend=None),
+        tooltip=[
+            alt.Tooltip('Hora:N', title='Hora'),
+            alt.Tooltip('Faturamento:Q', title='Faturamento', format='R$,.2f'),
+            alt.Tooltip('Pedidos:Q', title='Nº de Pedidos'),
+            alt.Tooltip('Ticket Medio:Q', title='Ticket Médio', format='R$,.2f')
+        ]
+    )
+    
+    # Texto (indicador) em cima das barras
+    texto = barras.mark_text(
+        align='center',
+        baseline='bottom',
+        dy=-5, # Deslocamento vertical para ficar acima da barra
+        color='white'
+    ).encode(
+        text=alt.Text('Faturamento:Q', format=',.0f')
+    )
+
+    chart = (barras + texto).properties(height=350)
+    st.altair_chart(chart, use_container_width=True)
