@@ -13,23 +13,30 @@ def show_oraculo():
         st.error("Dados não carregados")
         return
     
-    # Prepara contexto
+    # Prepara contexto detalhado
     context = f"""
-    📊 DADOS ATUAIS (Últimos {len(df_validos)} pedidos):
-    - Período: {df_validos['Data'].min()} a {df_validos['Data'].max()}
-    - Faturamento: R$ {df_validos['Total'].sum():,.2f}
-    - Ticket Médio: R$ {df_validos['Total'].mean():,.2f}
-    - Top Canais: {df_validos['Canal de venda'].value_counts().head(3).to_dict()}
-    - Horário Pico: {df_validos['Hora'].mode()[0]}h
+    🍔 DADOS DA LA BRASA BURGER (Últimos {len(df_validos)} pedidos):
+    
+    📅 Período: {df_validos['Data'].min()} a {df_validos['Data'].max()}
+    💰 Faturamento Total: R$ {df_validos['Total'].sum():,.2f}
+    🧾 Ticket Médio: R$ {df_validos['Total'].mean():,.2f}
+    
+    🚀 TOP 3 CANAIS:
+    {df_validos['Canal de venda'].value_counts().head(3).to_string()}
+    
+    ⏰ HORÁRIO PICO: {df_validos['Hora'].mode()[0]}h
+    🏙️ TOP BAIRROS: {df_validos['Bairro'].value_counts().head(3).to_string()}
+    
+    ❌ CANCELAMENTOS: {len(df_cancelados)} ({len(df_cancelados)/(len(df_validos)+len(df_cancelados)):.1%})
     """
     
     # Inicializa o chat
     if "messages" not in st.session_state:
         st.session_state.messages = [
-            {"role": "assistant", "content": "Olá! Sou o Oráculo da La Brasa Burger. Pergunte-me sobre:"}
+            {"role": "assistant", "content": "Olá! Sou o Oráculo da La Brasa Burger. 🍔\n\nPergunte-me sobre:\n- Análise de vendas\n- Padrões de consumo\n- Como melhorar resultados"}
         ]
     
-    # Mostra histórico do chat
+    # Mostra histórico
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
     
@@ -38,17 +45,17 @@ def show_oraculo():
         st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").write(prompt)
         
-        with st.spinner("Consultando os dados..."):
+        with st.spinner("Analisando os dados..."):
             resposta = DeepSeekAPI.ask(
                 question=prompt,
                 context=context,
                 historical_data={
-                    "validos": df_validos.head(1000).to_dict(),
-                    "cancelados": df_cancelados.head(1000).to_dict()
+                    "df_validos": df_validos.describe().to_dict(),
+                    "df_cancelados": df_cancelados.describe().to_dict()
                 }
             )
         
         st.session_state.messages.append({"role": "assistant", "content": resposta})
-        st.chat_message("assistant").write(resposta)
+        st.chat_message("assistant", avatar="🍔").write(resposta)
 
 show_oraculo()
