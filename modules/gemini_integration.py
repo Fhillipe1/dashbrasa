@@ -5,34 +5,35 @@ from typing import Dict, Any
 
 class GeminiOracle:
     @staticmethod
-    def ask(question: str, context: str, historical_data: Dict[str, Any] = None) -> str:
+    def ask(question: str, context: str) -> str:
         try:
-            # Configure sua API Key (armazene em secrets.toml)
+            # Configuração robusta
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             
-            model = genai.GenerativeModel('gemini-pro')
+            # Modelo atualizado (usar 'gemini-1.5-flash' ou 'gemini-1.0-pro')
+            model = genai.GenerativeModel('gemini-1.5-flash')  # Modelo mais rápido e gratuito
             
-            prompt = f"""
-            Você é o ORÁCULO ANALÍTICO da La Brasa Burger, especialista em:
-            - Análise de dados de hamburgueria
-            - Identificação de padrões de vendas
-            - Sugestões baseadas em dados
-
-            CONTEXTO ATUAL:
-            {context}
-
-            INSTRUÇÕES:
-            - Seja direto e analítico
-            - Use emojis relevantes 🍔📊
-            - Formate números como R$ 1.234,56
-            - Destaque insights importantes
-
-            PERGUNTA:
-            {question}
-            """
+            prompt = f"""Você é um analista especialista em hamburguerias. 
+            Contexto: {context}
             
-            response = model.generate_content(prompt)
+            Responda de forma direta e analítica, usando:
+            - Emojis relevantes 🍔📈
+            - Formato monetário (R$ 1.234,56)
+            - Destaques em negrito
+            
+            Pergunta: {question}"""
+            
+            # Configuração otimizada
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.3,
+                    "max_output_tokens": 1000
+                }
+            )
+            
             return response.text
             
         except Exception as e:
-            return f"⚠️ Erro: {str(e)}"
+            st.error(f"Erro Gemini: {str(e)}")
+            return "⚠️ Sistema temporariamente indisponível. Tente novamente mais tarde."
