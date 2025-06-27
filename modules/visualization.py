@@ -218,8 +218,6 @@ def criar_distplot_e_analise(df):
         df_outliers = df[df['Total'] > limite_superior]
         df_outliers_agrupado = df_outliers.groupby('Data')['Total'].sum().reset_index()
 
-        import plotly.graph_objects as go
-
         fig = go.Figure()
 
         # Área empilhada (como barras suavizadas)
@@ -267,6 +265,7 @@ def criar_distplot_e_analise(df):
                 st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
+
 
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
