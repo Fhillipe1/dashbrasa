@@ -95,6 +95,9 @@ if not df_validos.empty:
         
         visualization.criar_distplot_e_analise(df_filtrado)
 
+        visualization.criar_tabela_canais_com_linha_do_tempo(df_filtrado)
+        st.markdown("<br>", unsafe_allow_html=True)
+
     with tab_delivery:
         st.markdown("### <i class='bi bi-bicycle'></i> Análise de Entregas", unsafe_allow_html=True)
         df_delivery_filtrado = df_filtrado[df_filtrado['Tipo de Canal'] == 'Delivery']
