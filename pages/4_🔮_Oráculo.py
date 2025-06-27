@@ -2,44 +2,49 @@ import streamlit as st
 from modules.data_handler import ler_dados_do_gsheets
 from modules.gemini_integration import AdvancedOracle
 
-# Configuração inicial
+# Configuração Inicial
 oracle = AdvancedOracle()
 df_validos, _ = ler_dados_do_gsheets()
 
-# Inicialização do Chat
-if "oracle_initialized" not in st.session_state:
-    oracle.start_chat(df_validos)
-    st.session_state.oracle_initialized = True
-    st.session_state.messages = [
-        {"role": "assistant", "content": "🍔 Olá! Sou o Oráculo Analítico da La Brasa Burger. "
-                                      "Pergunte-me sobre:\n"
-                                      "- Comparativo entre canais de venda\n"
-                                      "- Análise por período/horário\n"
-                                      "- Sugestões para aumentar faturamento"}
-    ]
+# Inicialização Automática
+if "oracle" not in st.session_state:
+    st.session_state.oracle = AdvancedOracle()
+    success = st.session_state.oracle.load_data(df_validos)
+    
+    if not success:
+        st.error("Falha ao inicializar o Oráculo. Verifique sua conexão.")
+        st.stop()
 
 # Interface do Chat
-st.title("🧠 Oráculo Inteligente - La Brasa Burger")
-st.caption("Analista de dados com memória contextual")
+st.title("🤖 Oráculo La Brasa Burger 2.0")
+st.caption("Analista de Dados com Memória Contextual")
 
-# Histórico de mensagens
+# Histórico de Mensagens
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": "🍔 Olá! Sou seu analista virtual. "
+                                      "Pergunte sobre vendas, cancelamentos ou otimizações!"}
+    ]
+
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-# Input do usuário
-if prompt := st.chat_input("Ex: 'Como melhorar as vendas no Ifood?'"):
+# Input do Usuário
+if prompt := st.chat_input("Ex: 'Quais produtos venderam menos no último mês?'"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.chat_message("user").write(prompt)
     
-    with st.spinner("Analisando profundamente..."):
-        response = oracle.ask(prompt)
+    with st.spinner("Analisando dados profundamente..."):
+        response = st.session_state.oracle.ask(prompt)
     
     st.session_state.messages.append({"role": "assistant", "content": response})
-    st.chat_message("assistant").write(response)
+    st.rerun()
 
-# Botão para análise automática
-if st.button("🔍 Gerar Insights Automáticos"):
-    analysis = oracle.ask("Gere 3 insights importantes baseados nos dados atuais, "
-                         "com sugestões acionáveis formatadas em tópicos.")
-    st.session_state.messages.append({"role": "assistant", "content": analysis})
+# Botão de Recarregar Dados
+if st.button("🔄 Atualizar Dados do Relatório"):
+    df_validos, _ = ler_dados_do_gsheets()
+    if st.session_state.oracle.load_data(df_validos):
+        st.success("Dados atualizados com sucesso!")
+    else:
+        st.error("Erro ao carregar novos dados")
     st.rerun()
