@@ -297,15 +297,15 @@ def criar_tabela_canais_com_linha_do_tempo(df):
             todos_valores.append(valor)
         linhas.append({
             "Canal": canal,
-            "Faturamento Total": formatar_moeda(total),
-            "Linha do Tempo": serie
+            "Faturamento Total": total,  # <- mantido como float!
+            "Linha do Tempo": serie      # <- lista de floats!
         })
 
     if not todos_valores:
         st.warning("Não há dados suficientes para gerar a linha do tempo.")
         return
 
-    y_max = max(todos_valores) * 1.1  # margem de 10%
+    y_max = max(todos_valores) * 1.1  # margem de segurança
 
     df_resultado = pd.DataFrame(linhas)
 
@@ -314,14 +314,21 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         df_resultado,
         column_config={
             "Canal": "Canal de Venda",
-            "Faturamento Total": st.column_config.TextColumn("Faturamento Total (R$)"),
+            "Faturamento Total": st.column_config.NumberColumn(
+                "Faturamento Total",
+                help="Soma total dos valores por canal",
+                format="R$ %.2f"
+            ),
             "Linha do Tempo": st.column_config.LineChartColumn(
-                "Linha do Tempo", y_min=0, y_max=y_max
+                "Linha do Tempo",
+                y_min=0,
+                y_max=y_max
             ),
         },
         hide_index=True,
         use_container_width=True
     )
+
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     # CSS ESPECÍFICO PARA O GLIDE DATA EDITOR
