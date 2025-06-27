@@ -10,15 +10,17 @@ def configurar_ia():
     try:
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
-            st.error("Chave da API do Gemini não encontrada.")
+            st.error("Chave da API do Gemini não encontrada. Por favor, configure-a nos segredos do Streamlit.")
             return None
         genai.configure(api_key=api_key)
+        
         system_instruction = (
             "Você é o Oráculo, um analista de dados especialista na hamburgueria La Brasa Burger de Aracaju. "
             "Sua missão é responder às perguntas de forma clara, amigável e baseada nos dados fornecidos no contexto. "
-            "Seja sempre profissional, direto ao ponto e use emojis de forma sutil. "
-            "Nunca invente dados. Se a informação não estiver no contexto, diga que você não tem acesso àquela informação específica."
+            "Seja sempre profissional, direto ao ponto e use emojis de forma sutil para tornar a conversa mais agradável. "
+            "Nunca invente dados. Se a informação não estiver no contexto fornecido, diga que você não tem acesso àquela informação específica."
         )
+        
         model = genai.GenerativeModel(
             model_name='gemini-1.5-pro-latest',
             system_instruction=system_instruction
@@ -33,16 +35,11 @@ def gerar_contexto_dados(df_filtrado, df_cancelados_filtrado):
     if df_filtrado.empty:
         return "Não há dados de vendas para o período selecionado."
 
-    # Resumo Geral
     faturamento_total = df_filtrado['Total'].sum()
     pedidos_totais = len(df_filtrado)
     ticket_medio = faturamento_total / pedidos_totais if pedidos_totais > 0 else 0
-    
-    # Análise por Canal
     canal_summary = df_filtrado.groupby('Canal de venda')['Total'].sum().sort_values(ascending=False)
     canal_principal = canal_summary.index[0] if not canal_summary.empty else "N/A"
-    
-    # Análise de Cancelamentos
     pedidos_cancelados = len(df_cancelados_filtrado)
     valor_cancelado = df_cancelados_filtrado['Total'].sum()
     
@@ -57,19 +54,20 @@ def gerar_contexto_dados(df_filtrado, df_cancelados_filtrado):
     """
     return contexto
 
+# --- FUNÇÃO CORRIGIDA ---
 def obter_resposta_ia(modelo, prompt_usuario, historico_chat, contexto_dados):
     """Envia o prompt, o contexto e o histórico para a IA e retorna a resposta."""
     if modelo is None:
         return "Desculpe, a IA não está configurada."
 
     try:
-        # Formata o histórico para a API
-        historico_formatado = [
+        # Formata o histórico para a API, mas SEM a última pergunta do usuário
+        historico_para_api = [
             {'role': 'user' if m['role'] == 'user' else 'model', 'parts': [m['content']]}
-            for m in historico_chat
+            for m in historico_chat[:-1] # Pega todos, exceto o último item
         ]
         
-        # Constrói o prompt final com o contexto
+        # Constrói o prompt final com o contexto e a pergunta ATUAL do usuário
         prompt_com_contexto = f"""
         Contexto de dados para sua análise:
         ---
@@ -80,10 +78,13 @@ def obter_resposta_ia(modelo, prompt_usuario, historico_chat, contexto_dados):
         Pergunta: "{prompt_usuario}"
         """
 
-        conversa = modelo.start_chat(history=historico_formatado)
+        # Inicia o chat com o histórico anterior
+        conversa = modelo.start_chat(history=historico_para_api)
+        # Envia a nova mensagem com contexto
         response = conversa.send_message(prompt_com_contexto)
         
         return response.text
     except Exception as e:
         print(f"Erro ao obter resposta da IA: {e}")
-        return f"Ocorreu um erro ao processar sua pergunta: {e}"
+        # Retorna o erro de forma mais clara para o usuário
+        return f"Ocorreu um erro ao comunicar com a API: {str(e)}"
