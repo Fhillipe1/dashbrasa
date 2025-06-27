@@ -268,6 +268,54 @@ def criar_distplot_e_analise(df):
 
 
 
+def criar_tabela_canais_com_linha_do_tempo(df):
+    st.markdown("#### <i class='bi bi-bar-chart-line'></i> Faturamento por Canal com Linha do Tempo", unsafe_allow_html=True)
+
+    if df.empty or 'Canal de venda' not in df.columns or 'Data' not in df.columns or 'Total' not in df.columns:
+        st.info("Dados insuficientes para gerar a análise."); return
+
+    df['Data'] = pd.to_datetime(df['Data'])
+
+    # Obtemos o faturamento diário por canal
+    canais = df['Canal de venda'].unique()
+    dados_tabela = []
+
+    for canal in canais:
+        df_canal = df[df['Canal de venda'] == canal]
+        faturamento_total = df_canal['Total'].sum()
+
+        # Agrupar por data e criar a linha do tempo (mesmo número de dias para todos os canais)
+        faturamento_por_dia = df_canal.groupby('Data')['Total'].sum()
+        datas_padrao = pd.date_range(df['Data'].min(), df['Data'].max())
+        faturamento_por_dia = faturamento_por_dia.reindex(datas_padrao, fill_value=0)
+
+        dados_tabela.append({
+            'Canal': canal,
+            'Faturamento': faturamento_total,
+            'Linha do Tempo': faturamento_por_dia.tolist()
+        })
+
+    df_final = pd.DataFrame(dados_tabela)
+
+    st.dataframe(
+        df_final,
+        column_config={
+            "Canal": st.column_config.TextColumn("Canal de Venda"),
+            "Faturamento": st.column_config.NumberColumn(
+                "Faturamento Total",
+                format="R$ %.2f"
+            ),
+            "Linha do Tempo": st.column_config.LineChartColumn(
+                "Evolução Diária do Faturamento",
+                y_min=0
+            ),
+        },
+        hide_index=True,
+        use_container_width=True,
+    )
+
+
+
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     # CSS ESPECÍFICO PARA O GLIDE DATA EDITOR
     st.markdown("""
