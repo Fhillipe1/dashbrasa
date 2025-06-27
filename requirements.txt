@@ -13,3 +13,4 @@ streamlit-folium
 scipy
 plotly
 google-generativeai
+tabulate
