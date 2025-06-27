@@ -23,7 +23,7 @@ def configurar_ia():
         )
         
         model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash',
+            model_name='gemini-1.5-flash',
             system_instruction=system_instruction
         )
         return model
@@ -31,54 +31,32 @@ def configurar_ia():
         st.error(f"Ocorreu um erro ao configurar a IA: {e}")
         return None
 
-def gerar_contexto_dados(df_filtrado, df_cancelados_filtrado):
+def gerar_contexto_dados(df_validos, df_cancelados):
     """Gera um resumo detalhado em tabelas markdown para usar como contexto para a IA."""
-    if df_filtrado.empty:
-        return "Não há dados de vendas para o período selecionado."
+    if df_validos.empty:
+        return "Não há dados de vendas para analisar."
 
     # Resumo Geral
-    faturamento_total = df_filtrado['Total'].sum()
-    pedidos_totais = len(df_filtrado)
+    faturamento_total = df_validos['Total'].sum()
+    pedidos_totais = len(df_validos)
     ticket_medio = faturamento_total / pedidos_totais if pedidos_totais > 0 else 0
     
     resumo_geral_md = f"""
-- Faturamento Total: {viz.formatar_moeda(faturamento_total)}
-- Número Total de Pedidos: {pedidos_totais}
-- Ticket Médio Geral: {viz.formatar_moeda(ticket_medio)}
+- Faturamento Total (Geral): {viz.formatar_moeda(faturamento_total)}
+- Número Total de Pedidos (Geral): {pedidos_totais}
+- Ticket Médio (Geral): {viz.formatar_moeda(ticket_medio)}
 """
-
     # Análise por Canal
-    df_canal = df_filtrado.groupby('Canal de venda').agg(
-        Faturamento=('Total', 'sum'),
-        Pedidos=('Pedido', 'count')
-    ).reset_index()
+    df_canal = df_validos.groupby('Canal de venda').agg(Faturamento=('Total', 'sum'), Pedidos=('Pedido', 'count')).reset_index()
     df_canal['Ticket_Medio'] = df_canal.apply(lambda r: r['Faturamento']/r['Pedidos'] if r['Pedidos']>0 else 0, axis=1)
     df_canal = df_canal.sort_values(by="Faturamento", ascending=False)
     vendas_canal_md = df_canal.to_markdown(index=False)
 
-    # Análise por Dia da Semana
-    df_dia = df_filtrado.groupby('Dia da Semana').agg(
-        Faturamento=('Total', 'sum'),
-        Pedidos=('Pedido', 'count')
-    ).reset_index()
-    vendas_dia_md = df_dia.to_markdown(index=False)
-
-    # Análise por Hora
-    df_hora = df_filtrado.groupby('Hora').agg(
-        Faturamento=('Total', 'sum'),
-        Pedidos=('Pedido', 'count')
-    ).reset_index()
-    vendas_hora_md = df_hora.to_markdown(index=False)
-
     # Análise de Cancelamentos
-    pedidos_cancelados = len(df_cancelados_filtrado)
-    valor_cancelado = df_cancelados_filtrado['Total'].sum()
-    cancelados_md = f"""
-- Pedidos Cancelados: {pedidos_cancelados}
-- Prejuízo com Cancelamentos: {viz.formatar_moeda(valor_cancelado)}
-"""
+    pedidos_cancelados = len(df_cancelados)
+    valor_cancelado = df_cancelados['Total'].sum()
+    cancelados_md = f"- Total de Pedidos Cancelados: {pedidos_cancelados}\n- Prejuízo com Cancelamentos: {viz.formatar_moeda(valor_cancelado)}"
 
-    # Constrói o contexto final
     contexto_completo = f"""
 Aqui estão os dados de vendas da La Brasa Burger para sua análise:
 
@@ -87,12 +65,6 @@ Aqui estão os dados de vendas da La Brasa Burger para sua análise:
 
 ### Vendas por Canal de Venda
 {vendas_canal_md}
-
-### Vendas por Dia da Semana
-{vendas_dia_md}
-
-### Vendas por Hora
-{vendas_hora_md}
 
 ### Resumo de Cancelamentos
 {cancelados_md}
@@ -107,7 +79,7 @@ def obter_resposta_ia(modelo, prompt_usuario, historico_chat, contexto_dados):
     try:
         historico_para_api = [
             {'role': 'user' if m['role'] == 'user' else 'model', 'parts': [m['content']]}
-            for m in historico_chat[:-1]
+            for m in historico_chat
         ]
         
         prompt_com_contexto = f"""
