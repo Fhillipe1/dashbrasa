@@ -3,31 +3,35 @@ from modules.data_handler import ler_dados_do_gsheets
 from modules.deepseek_integration import DeepSeekAPI
 
 def show_oraculo():
-    # Carrega os dados primeiro
+    # Carrega os dados
     df_validos, df_cancelados = ler_dados_do_gsheets()
     
-    # Verificação segura dos dados
+    # Verificação dos dados
     if df_validos.empty:
-        st.error("Dados válidos não encontrados. Verifique a conexão com a planilha.")
+        st.error("Nenhum dado válido encontrado")
         return
     
-    # Debug: mostrar colunas disponíveis (opcional)
-    st.write("🔍 Colunas disponíveis nos dados válidos:", df_validos.columns.tolist())
-    
-    if not df_cancelados.empty:
-        st.write("🔍 Colunas disponíveis nos cancelados:", df_cancelados.columns.tolist())
-    
-    # --- Contexto para o Oráculo ---
+    # --- Contexto detalhado para o Oráculo ---
     context = f"""
-    DADOS DA LA BRASA BURGER (últimos {len(df_validos)} pedidos):
-    - Período: {df_validos['Data'].min()} a {df_validos['Data'].max()}
-    - Faturamento total: {df_validos['Total'].sum():.2f}
-    - Ticket médio: {df_validos['Total'].mean():.2f}
+    DADOS DA LA BRASA BURGER - ÚLTIMOS {len(df_validos)} PEDIDOS:
+    
+    📅 Período: {df_validos['Data'].min()} a {df_validos['Data'].max()}
+    💰 Faturamento Total: R$ {df_validos['Total'].sum():,.2f}
+    🧾 Ticket Médio: R$ {df_validos['Total'].mean():,.2f}
+    
+    CANAIS DE VENDA:
+    {df_validos['Canal de venda'].value_counts().to_string()}
+    
+    HORÁRIOS DE PICO:
+    {df_validos['Hora'].value_counts().head(3).to_string()}
+    
+    TOP 3 BAIRROS:
+    {df_validos['Bairro'].value_counts().head(3).to_string()}
     """
     
-    # --- Chat com o Oráculo ---
+    # --- Chat Interativo ---
     st.subheader("💬 Pergunte ao Oráculo")
-    user_question = st.text_input("Ex: 'Qual dia tem maior faturamento?'")
+    user_question = st.text_input("Ex: 'Qual canal de venda tem maior ticket médio?'")
     
     if user_question:
         resposta = DeepSeekAPI.ask(
@@ -35,23 +39,41 @@ def show_oraculo():
             context=context,
             historical_data=df_validos.to_dict()
         )
-        st.markdown(f"**Resposta:** {resposta}")
+        st.markdown(f"**🔮 Resposta:** {resposta}")
     
     # --- Insights Automáticos ---
-    st.subheader("📊 Insights do Dia")
+    st.subheader("📊 Principais Métricas")
     
-    # Verificação segura de colunas antes de acessá-las
-    if 'Dia da Semana' in df_validos.columns:
-        dia_top = df_validos.groupby('Dia da Semana')['Total'].sum().idxmax()
-        st.write(f"📅 **Melhor dia**: {dia_top}")
+    col1, col2, col3 = st.columns(3)
     
-    if 'Hora' in df_validos.columns:
-        hora_pico = df_validos['Hora'].mode()[0]
-        st.write(f"⏰ **Horário de pico**: {hora_pico}h")
+    with col1:
+        st.metric("Faturamento Total", f"R$ {df_validos['Total'].sum():,.2f}")
+    
+    with col2:
+        st.metric("Ticket Médio", f"R$ {df_validos['Total'].mean():,.2f}")
+    
+    with col3:
+        st.metric("Pedidos/Dia", len(df_validos) / df_validos['Data'].nunique())
+    
+    # --- Análise por Canal ---
+    st.subheader("📶 Performance por Canal")
+    canais = df_validos.groupby('Canal de venda').agg({
+        'Total': ['sum', 'mean', 'count'],
+        'Hora': lambda x: x.mode()[0]
+    })
+    st.dataframe(canais.style.format({
+        ('Total', 'sum'): 'R$ {:.2f}',
+        ('Total', 'mean'): 'R$ {:.2f}'
+    }))
+    
+    # --- Análise de Cancelamentos ---
+    if not df_cancelados.empty:
+        st.subheader("❌ Análise de Cancelamentos")
+        if 'Motivo do desconto' in df_cancelados.columns:
+            st.write("Motivos mais comuns:")
+            st.write(df_cancelados['Motivo do desconto'].value_counts().head(5))
 
-# Chamada principal com tratamento de erro
 try:
     show_oraculo()
 except Exception as e:
-    st.error(f"Ocorreu um erro inesperado: {str(e)}")
-    st.info("Por favor verifique os logs para mais detalhes.")
+    st.error(f"Erro: {str(e)}")
