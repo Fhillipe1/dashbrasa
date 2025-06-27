@@ -297,15 +297,17 @@ def criar_tabela_canais_com_linha_do_tempo(df):
             todos_valores.append(valor)
         linhas.append({
             "Canal": canal,
-            "Faturamento Total": total,  # <- mantido como float!
-            "Linha do Tempo": serie      # <- lista de floats!
+            "Faturamento Total": total,  # Mantido como float
+            "Linha do Tempo": serie      # Lista de floats
         })
 
     if not todos_valores:
         st.warning("Não há dados suficientes para gerar a linha do tempo.")
         return
 
-    y_max = max(todos_valores) * 1.1  # margem de segurança
+    # 🛠️ Correção: evitar y_max = 0
+    valor_maximo = max(todos_valores)
+    y_max = valor_maximo * 1.1 if valor_maximo > 0 else 1
 
     df_resultado = pd.DataFrame(linhas)
 
@@ -328,6 +330,7 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         hide_index=True,
         use_container_width=True
     )
+
 
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
