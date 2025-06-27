@@ -72,6 +72,10 @@ if not df_validos.empty:
     if not df_cancelados.empty:
         df_cancelados_filtrado = df_cancelados[(df_cancelados['Data'] >= data_inicial) & (df_cancelados['Data'] <= data_final)]
 
+    # --- SALVA OS DADOS FILTRADOS NA SESSÃO PARA O ORÁCULO USAR ---
+    st.session_state['df_filtrado_global'] = df_filtrado
+    st.session_state['df_cancelados_filtrado_global'] = df_cancelados_filtrado
+
     tab_resumo, tab_delivery, tab_cancelados_aba = st.tabs(["Resumo Geral", "Análise de Delivery", "Análise de Cancelados"])
 
     with tab_resumo:
