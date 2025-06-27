@@ -269,51 +269,50 @@ def criar_distplot_e_analise(df):
 
 
 def criar_tabela_canais_com_linha_do_tempo(df):
-    st.markdown("#### <i class='bi bi-bar-chart-line'></i> Faturamento por Canal com Linha do Tempo", unsafe_allow_html=True)
-
     if df.empty or 'Canal de venda' not in df.columns or 'Data' not in df.columns or 'Total' not in df.columns:
-        st.info("Dados insuficientes para gerar a análise."); return
+        st.info("Não há dados suficientes para gerar a tabela de canais com linha do tempo.")
+        return
 
-    df['Data'] = pd.to_datetime(df['Data'])
+    df_temp = (
+        df.groupby(['Canal de venda', 'Data'])['Total']
+        .sum()
+        .reset_index()
+    )
 
-    # Obtemos o faturamento diário por canal
-    canais = df['Canal de venda'].unique()
-    dados_tabela = []
+    canais = df_temp['Canal de venda'].unique()
+    data_inicial = df_temp['Data'].min()
+    data_final = df_temp['Data'].max()
+    datas = pd.date_range(data_inicial, data_final)
 
+    linhas = []
     for canal in canais:
-        df_canal = df[df['Canal de venda'] == canal]
-        faturamento_total = df_canal['Total'].sum()
-
-        # Agrupar por data e criar a linha do tempo (mesmo número de dias para todos os canais)
-        faturamento_por_dia = df_canal.groupby('Data')['Total'].sum()
-        datas_padrao = pd.date_range(df['Data'].min(), df['Data'].max())
-        faturamento_por_dia = faturamento_por_dia.reindex(datas_padrao, fill_value=0)
-
-        dados_tabela.append({
-            'Canal': canal,
-            'Faturamento': faturamento_total,
-            'Linha do Tempo': faturamento_por_dia.tolist()
+        df_canal = df_temp[df_temp['Canal de venda'] == canal]
+        total = df_canal['Total'].sum()
+        serie = []
+        for data in datas:
+            valor = df_canal[df_canal['Data'] == data.date()]['Total'].sum()
+            serie.append(round(valor, 2))
+        linhas.append({
+            "Canal": canal,
+            "Faturamento Total": formatar_moeda(total),
+            "Linha do Tempo": serie
         })
 
-    df_final = pd.DataFrame(dados_tabela)
+    df_resultado = pd.DataFrame(linhas)
 
+    st.markdown("### <i class='bi bi-bar-chart'></i> Faturamento por Canal com Linha do Tempo", unsafe_allow_html=True)
     st.dataframe(
-        df_final,
+        df_resultado,
         column_config={
-            "Canal": st.column_config.TextColumn("Canal de Venda"),
-            "Faturamento": st.column_config.NumberColumn(
-                "Faturamento Total",
-                format="R$ %.2f"
-            ),
+            "Canal": "Canal de Venda",
+            "Faturamento Total": st.column_config.TextColumn("Faturamento Total (R$)"),
             "Linha do Tempo": st.column_config.LineChartColumn(
-                "Evolução Diária do Faturamento",
-                y_min=0
+                "Linha do Tempo", y_min=0
             ),
         },
         hide_index=True,
-        use_container_width=True,
+        use_container_width=True
     )
-
 
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
