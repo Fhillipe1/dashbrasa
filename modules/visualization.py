@@ -1,6 +1,7 @@
 # modules/visualization.py
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 import textwrap
@@ -279,7 +280,6 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         .reset_index()
     )
 
-    # 🛠️ Garante que 'Data' esteja no formato datetime.date
     df_temp['Data'] = pd.to_datetime(df_temp['Data']).dt.date
 
     canais = df_temp['Canal de venda'].unique()
@@ -301,8 +301,8 @@ def criar_tabela_canais_com_linha_do_tempo(df):
             todos_valores.append(valor)
         linhas.append({
             "Canal": canal,
-            "Faturamento": total,  # float para cálculos
-            "Faturamento Formatado": formatar_moeda(total),  # string formatada para exibição
+            "Faturamento": total,
+            "Faturamento Formatado": formatar_moeda(total),
             "Linha do Tempo": serie
         })
 
@@ -313,26 +313,46 @@ def criar_tabela_canais_com_linha_do_tempo(df):
     y_max = max(todos_valores) * 1.1 if max(todos_valores) > 0 else 1
 
     df_resultado = pd.DataFrame(linhas)
+    df_resultado.sort_values(by="Faturamento", ascending=False, inplace=True)
 
     st.markdown("### <i class='bi bi-bar-chart'></i> Faturamento por Canal com Linha do Tempo", unsafe_allow_html=True)
-    st.dataframe(
-        df_resultado.drop(columns=['Faturamento']),  # Esconde a coluna auxiliar
-        column_config={
-            "Canal": "Canal de Venda",
-            "Faturamento Formatado": st.column_config.TextColumn(
-                "Faturamento Total",
-                help="Soma total dos valores por canal"
-            ),
-            "Linha do Tempo": st.column_config.LineChartColumn(
-                "Linha do Tempo",
-                y_min=0,
-                y_max=y_max
-            ),
-        },
-        hide_index=True,
-        use_container_width=True
-    )
 
+    col_tabela, col_pizza = st.columns([2, 1])
+
+    with col_tabela:
+        st.dataframe(
+            df_resultado.drop(columns=['Faturamento']),
+            column_config={
+                "Canal": "Canal de Venda",
+                "Faturamento Formatado": st.column_config.TextColumn(
+                    "Faturamento Total",
+                    help="Soma total dos valores por canal"
+                ),
+                "Linha do Tempo": st.column_config.LineChartColumn(
+                    "Linha do Tempo",
+                    y_min=0,
+                    y_max=y_max
+                ),
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+
+    with col_pizza:
+        fig_pizza = px.pie(
+            df_resultado,
+            names="Canal",
+            values="Faturamento",
+            hole=0.4,
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        fig_pizza.update_layout(
+            title="Participação por Canal",
+            height=350,
+            margin=dict(t=50, b=20, l=20, r=20),
+            showlegend=True
+        )
+        st.plotly_chart(fig_pizza, use_container_width=True)
 
 
 
