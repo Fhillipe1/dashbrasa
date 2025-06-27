@@ -279,6 +279,9 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         .reset_index()
     )
 
+    # 🛠️ Garante que 'Data' esteja no formato datetime.date
+    df_temp['Data'] = pd.to_datetime(df_temp['Data']).dt.date
+
     canais = df_temp['Canal de venda'].unique()
     data_inicial = df_temp['Data'].min()
     data_final = df_temp['Data'].max()
@@ -292,34 +295,33 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         total = df_canal['Total'].sum()
         serie = []
         for data in datas:
-            valor = df_canal[df_canal['Data'] == data.date()]['Total'].sum()
+            data_atual = data.date()
+            valor = df_canal[df_canal['Data'] == data_atual]['Total'].sum()
             serie.append(round(valor, 2))
             todos_valores.append(valor)
         linhas.append({
             "Canal": canal,
-            "Faturamento Total": total,  # Mantido como float
-            "Linha do Tempo": serie      # Lista de floats
+            "Faturamento": total,  # float para cálculos
+            "Faturamento Formatado": formatar_moeda(total),  # string formatada para exibição
+            "Linha do Tempo": serie
         })
 
     if not todos_valores:
         st.warning("Não há dados suficientes para gerar a linha do tempo.")
         return
 
-    # 🛠️ Correção: evitar y_max = 0
-    valor_maximo = max(todos_valores)
-    y_max = valor_maximo * 1.1 if valor_maximo > 0 else 1
+    y_max = max(todos_valores) * 1.1 if max(todos_valores) > 0 else 1
 
     df_resultado = pd.DataFrame(linhas)
 
     st.markdown("### <i class='bi bi-bar-chart'></i> Faturamento por Canal com Linha do Tempo", unsafe_allow_html=True)
     st.dataframe(
-        df_resultado,
+        df_resultado.drop(columns=['Faturamento']),  # Esconde a coluna auxiliar
         column_config={
             "Canal": "Canal de Venda",
-            "Faturamento Total": st.column_config.NumberColumn(
+            "Faturamento Formatado": st.column_config.TextColumn(
                 "Faturamento Total",
-                help="Soma total dos valores por canal",
-                format="R$ %.2f"
+                help="Soma total dos valores por canal"
             ),
             "Linha do Tempo": st.column_config.LineChartColumn(
                 "Linha do Tempo",
@@ -330,6 +332,7 @@ def criar_tabela_canais_com_linha_do_tempo(df):
         hide_index=True,
         use_container_width=True
     )
+
 
 
 
