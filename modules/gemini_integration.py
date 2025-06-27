@@ -10,26 +10,27 @@ class SmartOracle:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Configuração robusta do modelo Gemini"""
+        """Configuração à prova de falhas"""
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
             self.model = genai.GenerativeModel('gemini-1.5-flash')
         except Exception as e:
             st.error(f"Erro na inicialização: {str(e)}")
-            self.model = None
 
     def _generate_analysis(self, df: pd.DataFrame) -> dict:
-        """Pré-analisa os dados para enviar contexto estruturado"""
+        """Transforma os dados em formato JSON seguro"""
         if df.empty:
             return {}
         
-        # Análise por dia da semana
-        dias_analise = df.groupby('Dia da Semana').agg({
-            'Total': ['sum', 'mean', 'count'],
-            'Hora': lambda x: x.mode()[0]
-        }).reset_index()
+        # Análise por dia da semana (evitando multi-index)
+        dias_analise = df.groupby('Dia da Semana', as_index=False).agg(
+            Faturamento_Total=('Total', 'sum'),
+            Ticket_Medio=('Total', 'mean'),
+            Total_Pedidos=('Pedido', 'count'),
+            Horario_Pico=('Hora', lambda x: x.mode()[0])
+        )
         
-        # Convertemos para dicionário estruturado
+        # Convertemos para dicionário seguro
         analysis = {
             "periodo": {
                 "inicio": str(df['Data'].min()),
@@ -38,45 +39,45 @@ class SmartOracle:
             "metricas_gerais": {
                 "faturamento_total": float(df['Total'].sum()),
                 "ticket_medio": float(df['Total'].mean()),
-                "total_pedidos": len(df)
+                "total_pedidos": int(len(df))
             },
-            "dias_semana": dias_analise.to_dict(orient='records'),
+            "analise_dias_semana": dias_analise.to_dict(orient='records'),
             "top_canais": df['Canal de venda'].value_counts().head(3).to_dict()
         }
         
         return analysis
 
     def ask_question(self, df: pd.DataFrame, question: str) -> str:
-        """Processa perguntas com análise prévia dos dados"""
+        """Processa perguntas com tratamento robusto de erros"""
         if self.model is None:
-            return "⚠️ Modelo não inicializado. Verifique sua chave API."
+            return "🔴 Erro: Modelo não inicializado"
         
         try:
-            # Pré-analisa os dados
             analysis = self._generate_analysis(df)
             
-            # Contexto detalhado
-            context = f"""
-            🍔 ANÁLISE DOS DADOS (JSON):
+            prompt = f"""
+            CONTEXTO (ANÁLISE DE DADOS):
             {json.dumps(analysis, indent=2, ensure_ascii=False)}
             
+            PERGUNTA:
+            {question}
+            
             INSTRUÇÕES:
-            1. Use os dados PRÉ-ANALISADOS acima
-            2. Responda em português claro
-            3. Destaque números importantes
-            4. Sugira ações quando relevante
+            1. Responda em português (Brasil)
+            2. Formate números como R$ 1.234,56
+            3. Destaque os 3 principais insights
+            4. Sugira ações práticas quando aplicável
             """
             
-            # Chamada ao modelo
             response = self.model.generate_content(
-                f"CONTEXTO: {context}\n\nPERGUNTA: {question}",
+                prompt,
                 generation_config={
-                    "temperature": 0.3,
-                    "max_output_tokens": 1500
+                    "temperature": 0.2,  # Menos criativo, mais factual
+                    "max_output_tokens": 2000
                 }
             )
-            
             return response.text
             
         except Exception as e:
-            return f"⚠️ Erro ao processar: {str(e)}"
+            st.error(f"Erro detalhado: {str(e)}")
+            return "⚠️ Erro ao gerar resposta. Verifique os logs."
