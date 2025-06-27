@@ -1,38 +1,45 @@
-# pages/4_🔮_Oráculo.py
 import streamlit as st
 from modules.data_handler import ler_dados_do_gsheets
-from modules.gemini_integration import GeminiOracle  # Mudamos a importação
+from modules.gemini_integration import AdvancedOracle
 
-def show_oraculo():
-    st.title("🔮 Oráculo La Brasa Burger (Gemini)")
-    
-    # Carrega dados
-    df_validos, df_cancelados = ler_dados_do_gsheets()
-    
-    # Contexto analítico
-    context = f"""
-    🍔 DADOS RECENTES:
-    - Período: {df_validos['Data'].min()} a {df_validos['Data'].max()}
-    - Faturamento: R$ {df_validos['Total'].sum():,.2f}
-    - Ticket Médio: R$ {df_validos['Total'].mean():,.2f}
-    - Top Canal: {df_validos['Canal de venda'].mode()[0]}
-    """
-    
-    # Chat interativo
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    
-    for msg in st.session_state.messages:
-        st.chat_message(msg["role"]).write(msg["content"])
-    
-    if prompt := st.chat_input("Pergunte sobre vendas, cancelamentos..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.chat_message("user").write(prompt)
-        
-        with st.spinner("Analisando..."):
-            resposta = GeminiOracle.ask(prompt, context)
-        
-        st.session_state.messages.append({"role": "assistant", "content": resposta})
-        st.chat_message("assistant").write(resposta)
+# Configuração inicial
+oracle = AdvancedOracle()
+df_validos, _ = ler_dados_do_gsheets()
 
-show_oraculo()
+# Inicialização do Chat
+if "oracle_initialized" not in st.session_state:
+    oracle.start_chat(df_validos)
+    st.session_state.oracle_initialized = True
+    st.session_state.messages = [
+        {"role": "assistant", "content": "🍔 Olá! Sou o Oráculo Analítico da La Brasa Burger. "
+                                      "Pergunte-me sobre:\n"
+                                      "- Comparativo entre canais de venda\n"
+                                      "- Análise por período/horário\n"
+                                      "- Sugestões para aumentar faturamento"}
+    ]
+
+# Interface do Chat
+st.title("🧠 Oráculo Inteligente - La Brasa Burger")
+st.caption("Analista de dados com memória contextual")
+
+# Histórico de mensagens
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
+
+# Input do usuário
+if prompt := st.chat_input("Ex: 'Como melhorar as vendas no Ifood?'"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user").write(prompt)
+    
+    with st.spinner("Analisando profundamente..."):
+        response = oracle.ask(prompt)
+    
+    st.session_state.messages.append({"role": "assistant", "content": response})
+    st.chat_message("assistant").write(response)
+
+# Botão para análise automática
+if st.button("🔍 Gerar Insights Automáticos"):
+    analysis = oracle.ask("Gere 3 insights importantes baseados nos dados atuais, "
+                         "com sugestões acionáveis formatadas em tópicos.")
+    st.session_state.messages.append({"role": "assistant", "content": analysis})
+    st.rerun()
