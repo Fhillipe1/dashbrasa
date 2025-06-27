@@ -6,6 +6,10 @@ from modules.deepseek_integration import DeepSeekAPI
 from modules.visualization import formatar_moeda
 
 def show_oraculo():
+    # Verifique as colunas disponíveis
+    st.write("Colunas em df_validos:", df_validos.columns.tolist())
+    st.write("Colunas em df_cancelados:", df_cancelados.columns.tolist())
+    
     st.title("🔮 Oráculo La Brasa Burger")
     st.markdown("""
     **Analista de dados inteligente**. Faça perguntas sobre:
