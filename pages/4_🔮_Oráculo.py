@@ -63,9 +63,21 @@ def show_oraculo():
     
     # --- Análise de Cancelamentos ---
     if not df_cancelados.empty:
-        st.markdown("**❌ Principais motivos de cancelamento**")
-        motivo_top = df_cancelados['Motivo de cancelamento'].value_counts().idxmax()
-        st.write(f"- '{motivo_top}' ({df_cancelados['Motivo de cancelamento'].value_counts().max()} ocorrências)")
+        # Verifica se a coluna existe com diferentes nomes possíveis
+        motivo_col = None
+        for possible_col in ['Motivo de cancelamento', 'Motivo cancelamento', 'Cancelamento']:
+            if possible_col in df_cancelados.columns:
+                motivo_col = possible_col
+                break
+        
+        if motivo_col:
+            st.markdown("**❌ Principais motivos de cancelamento**")
+            motivo_counts = df_cancelados[motivo_col].value_counts()
+            if not motivo_counts.empty:
+                motivo_top = motivo_counts.idxmax()
+                st.write(f"- '{motivo_top}' ({motivo_counts.max()} ocorrências)")
+        else:
+            st.warning("Nenhuma coluna de motivo de cancelamento encontrada nos dados.")
 
 # Chamada da página
 show_oraculo()
