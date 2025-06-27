@@ -202,42 +202,72 @@ def criar_distplot_e_analise(df):
     st.markdown("#### <i class='bi bi-distribute-vertical'></i> Análise de Distribuição de Valores", unsafe_allow_html=True)
     if df.empty:
         st.info("Não há dados para a análise de dispersão."); return
+
     col1, col2 = st.columns([1, 1])
     with col1:
-        dias_semana_ordem = ['1. Segunda', '2. Terça', '3. Quarta', '4. Quinta', '5. Sexta', '6. Sábado', '7. Domingo']
-        
-        hist_data = []
-        group_labels = []
+        df['Data'] = pd.to_datetime(df['Data'])
 
-        for dia in dias_semana_ordem:
-            dados_dia = df[df['Dia da Semana'] == dia]['Total']
-            # --- CORREÇÃO APLICADA AQUI ---
-            # Apenas inclui o dia no gráfico se tiver 2 ou mais pedidos para evitar erro estatístico
-            if len(dados_dia) > 1:
-                hist_data.append(dados_dia.tolist())
-                group_labels.append(dia.split('. ')[1])
-        
-        if not hist_data:
-             st.info("Não há dados suficientes (pelo menos 2 pedidos em um mesmo dia da semana) para gerar o gráfico de distribuição.")
-             return
+        # Agrupar por data: soma dos totais por dia
+        df_totais_por_data = df.groupby('Data')['Total'].sum().reset_index()
 
-        fig = ff.create_distplot(hist_data, group_labels, show_hist=False, show_rug=False)
-        fig.update_layout(template="streamlit", showlegend=True, yaxis_title="Densidade", xaxis_title="Valor do Pedido (R$)", margin=dict(l=20, r=20, t=40, b=20), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
+        # Calcular outliers: valores > Q3 + 1.5 * IQR
+        Q1 = df['Total'].quantile(0.25)
+        Q3 = df['Total'].quantile(0.75)
+        IQR = Q3 - Q1
+        limite_superior = Q3 + 1.5 * IQR
+        df_outliers = df[df['Total'] > limite_superior]
+        df_outliers_agrupado = df_outliers.groupby('Data')['Total'].sum().reset_index()
+
+        import plotly.graph_objects as go
+
+        fig = go.Figure()
+
+        # Área empilhada (como barras suavizadas)
+        fig.add_trace(go.Scatter(
+            x=df_totais_por_data['Data'],
+            y=df_totais_por_data['Total'],
+            mode='lines',
+            fill='tozeroy',
+            name='Total por Dia',
+            line=dict(color='rgba(0,123,255,0.5)', width=2)
+        ))
+
+        # Linha de outliers
+        if not df_outliers_agrupado.empty:
+            fig.add_trace(go.Scatter(
+                x=df_outliers_agrupado['Data'],
+                y=df_outliers_agrupado['Total'],
+                mode='lines+markers',
+                name='Outliers',
+                line=dict(color='red', dash='dash'),
+                marker=dict(size=6)
+            ))
+
+        fig.update_layout(
+            template="streamlit",
+            xaxis_title="Data",
+            yaxis_title="Faturamento Diário (R$)",
+            showlegend=True,
+            height=350,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+
         st.plotly_chart(fig, use_container_width=True)
-    
+
     with col2:
         st.markdown("###### O que este gráfico significa?")
-        st.markdown("Este gráfico mostra a **densidade** ou **concentração** dos valores dos pedidos para cada dia da semana. O pico da curva indica o valor de pedido mais comum. Curvas mais 'gordas' e espalhadas indicam uma grande variedade nos valores dos pedidos, enquanto curvas 'magras' e altas indicam que os valores dos pedidos são muito parecidos entre si.")
-        Q1 = df['Total'].quantile(0.25); Q3 = df['Total'].quantile(0.75); IQR = Q3 - Q1
-        limite_superior = Q3 + 1.5 * IQR
-        outliers = df[df['Total'] > limite_superior].sort_values(by='Total', ascending=False)
-        if not outliers.empty:
+        st.markdown("O gráfico mostra a **evolução diária do faturamento total**. A área azul representa os valores somados por dia. A linha vermelha em destaque representa os dias que tiveram **valores atípicos (outliers)**, ou seja, muito acima da média.")
+
+        if not df_outliers.empty:
             st.markdown("###### Pedidos com Valores Atípicos (Acima)")
-            for index, row in outliers.head(5).iterrows():
+            for index, row in df_outliers.sort_values(by='Total', ascending=False).head(5).iterrows():
                 data_formatada = pd.to_datetime(row['Data']).strftime('%d/%m')
                 st.markdown(f" • **{formatar_moeda(row['Total'])}** em {data_formatada} ({row['Canal de venda']})")
         else:
             st.text("Nenhum pedido com valor muito acima da média foi detectado no período.")
+
 
 def criar_tabela_top_clientes(df_delivery, nome_coluna_cliente='Consumidor'):
     # CSS ESPECÍFICO PARA O GLIDE DATA EDITOR
